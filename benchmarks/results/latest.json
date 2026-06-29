@@ -1,0 +1,95 @@
+{
+  "env": {
+    "device": "cpu",
+    "device_name": "cpu",
+    "torch": "2.12.1",
+    "python": "3.12.13",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "threads": 6
+  },
+  "model": {
+    "params_m": 10.75,
+    "n_layer": 6,
+    "n_head": 6,
+    "n_embd": 384,
+    "block_size": 512,
+    "vocab_size": 256
+  },
+  "config": {
+    "prompt_len": 64,
+    "new_tokens": 128,
+    "repeats": 5
+  },
+  "kv_cache": {
+    "cache_off": {
+      "latency": {
+        "n": 5,
+        "p50_ms": 597.844,
+        "p95_ms": 598.522,
+        "mean_ms": 597.401
+      },
+      "ttft_ms_p50": 2.849,
+      "tokens_per_s_mean": 214.26,
+      "peak_mem_mb": 9.9
+    },
+    "cache_on": {
+      "latency": {
+        "n": 5,
+        "p50_ms": 123.587,
+        "p95_ms": 126.252,
+        "mean_ms": 124.102
+      },
+      "ttft_ms_p50": 2.841,
+      "tokens_per_s_mean": 1031.54,
+      "peak_mem_mb": 0.07
+    },
+    "speedup_x": 4.81
+  },
+  "batching": {
+    "rows": [
+      {
+        "batch_size": 1,
+        "elapsed_s": 0.1234,
+        "tokens_per_s": 1037.02,
+        "total_tokens": 128,
+        "speedup_vs_b1": 1.0
+      },
+      {
+        "batch_size": 2,
+        "elapsed_s": 0.2617,
+        "tokens_per_s": 978.07,
+        "total_tokens": 256,
+        "speedup_vs_b1": 0.94
+      },
+      {
+        "batch_size": 4,
+        "elapsed_s": 0.2831,
+        "tokens_per_s": 1808.5,
+        "total_tokens": 512,
+        "speedup_vs_b1": 1.74
+      },
+      {
+        "batch_size": 8,
+        "elapsed_s": 0.3264,
+        "tokens_per_s": 3137.57,
+        "total_tokens": 1024,
+        "speedup_vs_b1": 3.03
+      },
+      {
+        "batch_size": 16,
+        "elapsed_s": 0.6224,
+        "tokens_per_s": 3290.29,
+        "total_tokens": 2048,
+        "speedup_vs_b1": 3.17
+      }
+    ]
+  },
+  "quantization": {
+    "fp32_size_mb": 43.795,
+    "int8_size_mb": 12.062,
+    "size_reduction_x": 3.63,
+    "fp32_latency_ms_p50": 125.12,
+    "int8_latency_ms_p50": 278.973,
+    "logit_mse": 0.000334
+  }
+}
