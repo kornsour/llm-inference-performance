@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Torch / build extensions
+*.so
+kernels/build/
+~/.cache/torch_extensions/
+
+# Generated benchmark artifacts — keep the canonical latest.json as committed evidence
+benchmarks/results/*.json
+!benchmarks/results/latest.json
+
+# OS / editor
+.DS_Store
+.idea/
+*.log

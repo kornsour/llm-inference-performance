@@ -1,0 +1,40 @@
+[project]
+name = "llm-inference-performance"
+version = "0.1.0"
+description = "LLM inference performance engineering: a benchmark harness (p50/p95 latency, tokens/sec, memory) and measured before/after optimizations — KV-cache, batching, int8 quantization — plus tensor-parallel serving (gloo/NCCL) and a custom CUDA kernel."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Andrew Kaiserauer" }]
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+    "psutil>=5.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llminf"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "E741"]
