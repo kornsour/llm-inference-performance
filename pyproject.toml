@@ -3,9 +3,15 @@ name = "llm-inference-performance"
 version = "0.1.0"
 description = "LLM inference performance engineering: a benchmark harness (p50/p95 latency, tokens/sec, memory) and measured before/after optimizations — KV-cache, batching, int8 quantization — plus tensor-parallel serving (gloo/NCCL) and a custom CUDA kernel."
 readme = "README.md"
-requires-python = ">=3.10"
+# Developed, tested, and documented on Python 3.14; 3.12 is the supported floor
+# (the torch build is the real constraint on the lower bound).
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Andrew Kaiserauer" }]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "torch>=2.2",
     "numpy>=1.26",
@@ -32,7 +38,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 src = ["src"]
 
 [tool.ruff.lint]
