@@ -76,13 +76,23 @@ def main(argv: list[str] | None = None) -> int:
         else BenchConfig()
 
     report = run_suite(device=args.device, cfg=cfg, bcfg=bcfg)
-
-    (ROOT / "benchmarks" / "results").mkdir(parents=True, exist_ok=True)
-    (ROOT / "benchmarks" / "results" / "latest.json").write_text(json.dumps(report, indent=2))
     md = render_markdown(report)
+    results_dir = ROOT / "benchmarks" / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    print(md)
+
+    if args.quick:
+        # Smoke run on a tiny model — never overwrite the committed full-run
+        # artifacts (docs/results.md, latest.json); write a throwaway instead.
+        out = results_dir / "quick.json"
+        out.write_text(json.dumps(report, indent=2))
+        print(f"[--quick] wrote {out.relative_to(ROOT)} — canonical docs/results.md "
+              "and latest.json left untouched.")
+        return 0
+
+    (results_dir / "latest.json").write_text(json.dumps(report, indent=2))
     (ROOT / "docs").mkdir(exist_ok=True)
     (ROOT / "docs" / "results.md").write_text(md)
-    print(md)
     print("wrote benchmarks/results/latest.json and docs/results.md")
     return 0
 

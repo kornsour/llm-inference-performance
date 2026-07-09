@@ -7,19 +7,18 @@
 > fused-RMSNorm CUDA kernel.
 
 [![CI](https://github.com/kornsour/llm-inference-performance/actions/workflows/ci.yml/badge.svg)](https://github.com/kornsour/llm-inference-performance/actions/workflows/ci.yml)
-&nbsp;PyTorch · runs on CPU (no GPU required) · GPU-portable (`--device cuda`)
+&nbsp;Python 3.14 (runs on 3.12+) · PyTorch · runs on CPU (no GPU required) · GPU-portable (`--device cuda`)
 
 ---
 
 ## Why this exists
 
-The OpenAI "Software Engineer, Model Inference" track is about making model
-serving **measurably faster and more memory-efficient** — utilizing every FLOP
-and every GB of GPU RAM — with the distributed-systems framing of real serving
-infrastructure. This repo demonstrates that skill set as a small, readable,
-**reproducible** lab: a compact GPT decoder, a benchmark harness that reports the
-metrics an inference team actually tracks, and optimizations whose wins are
-**measured**, not asserted.
+Inference performance engineering is about making model serving **measurably
+faster and more memory-efficient** — utilizing every FLOP and every GB of GPU RAM
+— with the distributed-systems framing of real serving infrastructure. This repo
+demonstrates that skill set as a small, readable, **reproducible** lab: a compact
+GPT decoder, a benchmark harness that reports the metrics an inference team
+actually tracks, and optimizations whose wins are **measured**, not asserted.
 
 It runs entirely on CPU (developed on Apple Silicon, no NVIDIA GPU), so anyone
 can clone it and reproduce the numbers. The **same harness and code paths run on
@@ -37,6 +36,8 @@ Reproduce with `make bench`. Numbers below: ~11M-param decoder
 PyTorch 2.12. Full machine-readable report in
 [`benchmarks/results/latest.json`](benchmarks/results/latest.json); rendered page
 in [`docs/results.md`](docs/results.md).
+
+![Measured optimizations: KV-cache 4.81× faster decode, batching 3.2× at batch 16, int8 3.63× smaller](docs/img/results.svg)
 
 ### 1. KV-cache — **4.81× faster decode**
 
@@ -87,7 +88,7 @@ CI (`tests/test_tensor_parallel.py`).
 ## Quickstart
 
 ```bash
-make install      # uv venv (Python 3.12) + deps (CPU torch)
+make install      # uv venv (Python 3.14) + deps (CPU torch)
 make bench        # full suite -> docs/results.md + JSON
 make test         # tests, incl. the 2-process gloo tensor-parallel check
 make tp-demo      # tensor-parallel + all-reduce micro-benchmark

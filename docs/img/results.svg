@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect x="0.5" y="0.5" width="859" height="299" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="24" y="30" font-size="14" font-weight="700" fill="#0f172a">Measured optimizations (CPU, ~11M-param decoder, prompt 64 → 128 tokens)</text>
+
+  <!-- ===== Panel A: KV-cache ===== -->
+  <g>
+    <text x="30" y="60" font-size="12.5" font-weight="600" fill="#334155">KV-cache</text>
+    <line x1="30" y1="210" x2="270" y2="210" stroke="#e2e8f0"/>
+    <!-- no cache 214 -> h29 -->
+    <rect x="90" y="181" width="52" height="29" rx="3" fill="#94a3b8"/>
+    <text x="116" y="174" font-size="11" fill="#64748b" text-anchor="middle">214</text>
+    <text x="116" y="226" font-size="10.5" fill="#64748b" text-anchor="middle">no cache</text>
+    <!-- cache 1032 -> h140 -->
+    <rect x="170" y="70" width="52" height="140" rx="3" fill="#6366f1"/>
+    <text x="196" y="63" font-size="11" fill="#4f46e5" text-anchor="middle" font-weight="600">1032</text>
+    <text x="196" y="226" font-size="10.5" fill="#4f46e5" text-anchor="middle">KV-cache</text>
+    <text x="150" y="252" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">4.81× faster decode</text>
+    <text x="150" y="270" font-size="10" fill="#94a3b8" text-anchor="middle">tokens / sec · identical greedy output</text>
+  </g>
+
+  <!-- ===== Panel B: Batching ===== -->
+  <g>
+    <text x="315" y="60" font-size="12.5" font-weight="600" fill="#334155">Batching throughput</text>
+    <line x1="315" y1="210" x2="545" y2="210" stroke="#e2e8f0"/>
+    <!-- points: x=315+35 + i*(160/4); tok/s 1037,978,1809,3138,3290 max3290 -->
+    <polyline points="350,165.9 400,168.4 450,133 500,76.5 550,70" fill="none" stroke="#6366f1" stroke-width="2.2"/>
+    <g fill="#6366f1">
+      <circle cx="350" cy="165.9" r="3"/><circle cx="400" cy="168.4" r="3"/>
+      <circle cx="450" cy="133" r="3"/><circle cx="500" cy="76.5" r="3"/><circle cx="550" cy="70" r="3"/>
+    </g>
+    <text x="550" y="63" font-size="11" fill="#4f46e5" text-anchor="middle" font-weight="600">3290</text>
+    <g font-size="10.5" fill="#94a3b8" text-anchor="middle">
+      <text x="350" y="226">b=1</text><text x="400" y="226">2</text><text x="450" y="226">4</text>
+      <text x="500" y="226">8</text><text x="550" y="226">16</text>
+    </g>
+    <text x="430" y="252" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">3.2× at batch 16</text>
+    <text x="430" y="270" font-size="10" fill="#94a3b8" text-anchor="middle">tokens / sec vs batch size</text>
+  </g>
+
+  <!-- ===== Panel C: int8 quantization ===== -->
+  <g>
+    <text x="590" y="60" font-size="12.5" font-weight="600" fill="#334155">int8 quantization</text>
+    <line x1="590" y1="210" x2="830" y2="210" stroke="#e2e8f0"/>
+    <!-- fp32 43.8 -> h140 ; int8 12.1 -> h38.6 -->
+    <rect x="650" y="70" width="52" height="140" rx="3" fill="#94a3b8"/>
+    <text x="676" y="63" font-size="11" fill="#64748b" text-anchor="middle">43.8</text>
+    <text x="676" y="226" font-size="10.5" fill="#64748b" text-anchor="middle">fp32</text>
+    <rect x="730" y="171.4" width="52" height="38.6" rx="3" fill="#6366f1"/>
+    <text x="756" y="164" font-size="11" fill="#4f46e5" text-anchor="middle" font-weight="600">12.1</text>
+    <text x="756" y="226" font-size="10.5" fill="#4f46e5" text-anchor="middle">int8</text>
+    <text x="710" y="252" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">3.63× smaller</text>
+    <text x="710" y="270" font-size="10" fill="#94a3b8" text-anchor="middle">model size (MB) · logit MSE 3.3e-04</text>
+  </g>
+</svg>
