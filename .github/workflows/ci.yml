@@ -44,3 +44,46 @@ jobs:
           name: benchmark-results
           path: benchmarks/results/*.json
           if-no-files-found: ignore
+
+  # The CUDA kernel is dispatched to only on a GPU, so nothing in `test` ever
+  # compiles it — which is exactly how it shipped broken. nvcc needs no GPU to
+  # compile and link, so this runs on an ordinary runner and closes that gap.
+  cuda-kernel-build:
+    name: CUDA kernel compiles + links (no GPU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The CUDA toolkit and a CUDA torch wheel are several GB between them;
+      # the stock runner image does not leave room without this.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 12.6 pairs with the cu126 torch wheel below, which is the same torch
+      # version the CPU jobs run — so this catches ATen/c10 API drift too, not
+      # just the wiring.
+      - name: Install CUDA toolkit (nvcc + cudart only)
+        uses: Jimver/cuda-toolkit@v0.2.36
+        id: cuda-toolkit
+        with:
+          cuda: "12.6.3"
+          method: network
+          sub-packages: '["nvcc", "cudart", "cudart-dev"]'
+
+      - name: Install torch (CUDA build)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "torch==2.13.0" \
+            --index-url https://download.pytorch.org/whl/cu126
+
+      - name: Build the extension, and prove the check rejects both defects
+        env:
+          CUDA_HOME: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}
+        run: python scripts/check_kernel_builds.py --self-test

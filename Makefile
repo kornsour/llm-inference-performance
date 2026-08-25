@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 PY := uv run
 
-.PHONY: help install bench bench-quick tp-demo test lint fmt clean
+.PHONY: help install bench bench-quick tp-demo test check-kernel lint fmt clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -23,6 +23,9 @@ tp-demo: ## Tensor-parallel demo + all-reduce micro-benchmark (2 procs, gloo)
 
 test: ## Run the test suite (incl. 2-proc gloo tensor-parallel check)
 	$(PY) -m pytest
+
+check-kernel: ## Compile + link the CUDA kernel (needs nvcc + a CUDA torch; no GPU)
+	$(PY) python scripts/check_kernel_builds.py --self-test
 
 lint: ## Lint with ruff
 	$(PY) -m ruff check src benchmarks scripts tests

@@ -105,6 +105,7 @@ make bench        # full suite -> docs/results.md + JSON
 make test         # tests, incl. the 2-process gloo tensor-parallel check
 make tp-demo      # tensor-parallel + all-reduce micro-benchmark
 make bench-quick  # fast smoke run
+make check-kernel # compile + link the CUDA kernel (needs nvcc, but no GPU)
 
 # On a GPU box, the same harness:
 uv run python benchmarks/run_all.py --device cuda
@@ -127,6 +128,7 @@ src/llminf/
 kernels/                the CUDA kernel source + notes
 benchmarks/run_all.py   runs everything, writes results
 scripts/tp_demo.py      torchrun entrypoint
+scripts/check_kernel_builds.py   compile+link the CUDA extension (no GPU needed)
 docs/                   methodology + generated results
 tests/                  correctness for every optimization (24 tests)
 ```

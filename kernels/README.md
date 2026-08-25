@@ -35,6 +35,15 @@ written:
 byte-identical to the string `rmsnorm.py` actually compiles, so the browsable
 copy cannot drift from the built one.
 
+Those are cheap proxies, though — the real proof is a build. `nvcc` needs no GPU
+to compile and link, so `make check-kernel`
+([`scripts/check_kernel_builds.py`](../scripts/check_kernel_builds.py)) reproduces
+exactly what `load_inline` emits and drives it through to a linked `.so` on any
+machine with the CUDA toolkit. It stops short of importing the module, which
+would need `libcuda.so.1` from the driver. CI runs it on an ordinary GPU-less
+runner, with `--self-test`: the script re-introduces each defect and requires the
+build to reject it, so the guard cannot pass vacuously.
+
 If the build fails at runtime, `rmsnorm.py` falls back to the PyTorch reference
 but emits a `RuntimeWarning` and keeps the compiler output in
 `rmsnorm.load_error()`. A silent fallback would hide a broken kernel behind
