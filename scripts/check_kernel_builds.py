@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -119,9 +120,22 @@ def _require_toolchain() -> str:
     return arch
 
 
-def _tail(log: str, n: int = 40) -> str:
+_NOISE = re.compile(r"Error compiling objects|raise RuntimeError|subprocess\.")
+
+
+def _diagnostics(log: str, n: int = 60) -> str:
+    """The compiler's own complaint, not the Python traceback that reports it.
+
+    setuptools re-raises ninja failures as `RuntimeError: Error compiling
+    objects for extension`, so the last lines of the log are always the same
+    uninformative traceback while the nvcc/gcc diagnostic sits above it.
+    """
     lines = [ln for ln in log.splitlines() if ln.strip()]
-    return "\n".join(f"    {ln}" for ln in lines[-n:])
+    hits = [i for i, ln in enumerate(lines)
+            if re.search(r"\berror\b|^FAILED:", ln, re.I) and not _NOISE.search(ln)]
+    if hits:
+        lines = lines[max(0, hits[0] - 3):min(len(lines), hits[-1] + 4)]
+    return "\n".join(f"    {ln}" for ln in lines[:n])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -162,7 +176,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             print(f"    OK -> {r.artifact.name}")
         else:
             failures.append("the shipped kernel sources do not build")
-            print("    FAILED\n" + _tail(r.log))
+            print("    FAILED\n" + _diagnostics(r.log))
 
         if args.self_test:
             for i, (label, cpp, cuda, expected) in enumerate(cases, start=2):
@@ -180,7 +194,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
                     failures.append(
                         f"{label!r} was rejected, but for none of {expected} — the "
                         "self-test cannot confirm this guard catches the real defect")
-                    print("    REJECTED FOR THE WRONG REASON\n" + _tail(res.log, 25))
+                    print("    REJECTED FOR THE WRONG REASON\n" + _diagnostics(res.log, 25))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
