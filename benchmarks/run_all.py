@@ -45,6 +45,13 @@ def render_markdown(r: dict) -> str:
             f"| {label} | {d['tokens_per_s_mean']} | {d['latency']['p50_ms']} | "
             f"{d['latency']['p95_ms']} | {d['ttft_ms_p50']} | {d['peak_mem_mb']} |")
     lines.append(f"\n**KV-cache speedup: {kv['speedup_x']}× tokens/sec.**\n")
+    lines.append(
+        f"The cache is memory *spent*, not saved: it holds "
+        f"**{kv['resident_kv_cache_mb']} MB** of K/V resident at the end of this run "
+        f"({c['prompt_len']} + {c['new_tokens']} tokens), and grows linearly with "
+        f"sequence length and batch size. Peak memory is the high-water mark of "
+        f"tensor bytes allocated inside each decode, above the resident model — see "
+        f"[`docs/methodology.md`](methodology.md).\n")
 
     lines.append("\n## 2. Batching throughput (KV-cache on)\n")
     lines.append("| batch size | tokens/sec | speedup vs b=1 | elapsed (s) |")
@@ -62,6 +69,11 @@ def render_markdown(r: dict) -> str:
                  f"{q['size_reduction_x']}× smaller |")
     lines.append(f"| p50 latency (ms) | {q['fp32_latency_ms_p50']} | {q['int8_latency_ms_p50']} | — |")
     lines.append(f"\nNumerical drift (logit MSE fp32→int8): **{q['logit_mse']}**.\n")
+    if q["latency_device"] != env["device"]:
+        lines.append(
+            f"\n> torch.ao dynamic quantization is a CPU-only path, so this section "
+            f"is measured on **{q['latency_device']}** even though the rest of this "
+            f"run used **{env['device']}**.\n")
     return "\n".join(lines) + "\n"
 
 
