@@ -18,11 +18,34 @@ run once or twice per transformer layer.
   via `torch.utils.cpp_extension.load_inline` **only when CUDA is available**, and
   dispatches to it; otherwise it uses a numerically identical PyTorch reference.
 
+## Building
+
+`load_inline(functions=["rmsnorm_forward"])` **generates** the `PYBIND11_MODULE`
+block itself, into a C++ translation unit separate from the CUDA one. Two
+consequences, both of which will otherwise stop the extension from building at
+all — and only on a machine that actually has a GPU, which is not where this was
+written:
+
+- this file must **not** declare a `PYBIND11_MODULE` of its own, or the link ends
+  up with two `PyInit_llminf_rmsnorm` symbols;
+- `cpp_sources` must **declare** every exported function, or the generated
+  bindings reference an undeclared `rmsnorm_forward`.
+
+`tests/test_rmsnorm.py` asserts both invariants, and that this file stays
+byte-identical to the string `rmsnorm.py` actually compiles, so the browsable
+copy cannot drift from the built one.
+
+If the build fails at runtime, `rmsnorm.py` falls back to the PyTorch reference
+but emits a `RuntimeWarning` and keeps the compiler output in
+`rmsnorm.load_error()`. A silent fallback would hide a broken kernel behind
+numbers that still look plausible.
+
 ## Correctness
 
 `tests/test_rmsnorm.py` verifies the PyTorch reference against the math on every
-platform. On a CUDA host, the same test path compares the fused kernel against
-the reference (`torch.testing.assert_close`). This repo was developed on Apple
+platform. On a CUDA host, the same test path asserts the kernel built (no
+`load_error()`), that dispatch actually selects it, and that it matches the
+reference (`torch.testing.assert_close`). This repo was developed on Apple
 Silicon (no CUDA), so the kernel is shipped compile-ready and is exercised on GPU
 hardware; the reference path is what runs in CI.
 
