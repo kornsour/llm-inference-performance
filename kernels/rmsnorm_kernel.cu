@@ -13,7 +13,12 @@
 // One block per row; blockDim.x threads cooperatively reduce the sum of squares
 // in shared memory, then normalize and scale in a single pass over the activation.
 #include <torch/extension.h>
-#include <ATen/cuda/CUDAContext.h>
+// c10/cuda/CUDAStream.h rather than ATen/cuda/CUDAContext.h: the ATen umbrella
+// header pulls in cusparse/cublas/cublasLt/cusolver just to hand back the
+// current stream, so including it would make this extension unbuildable against
+// a CUDA install that ships nvcc and cudart but not the math libraries -- which
+// is what minimal toolkit images and CI runners give you.
+#include <c10/cuda/CUDAStream.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAException.h>
 
@@ -71,7 +76,7 @@ torch::Tensor rmsnorm_forward(torch::Tensor x, torch::Tensor weight, double eps)
     const int threads = 256;
     AT_DISPATCH_FLOATING_TYPES(x2.scalar_type(), "rmsnorm_forward", [&] {
         rmsnorm_kernel<scalar_t><<<(unsigned)rows, threads, threads * sizeof(float),
-                                   at::cuda::getCurrentCUDAStream()>>>(
+                                   c10::cuda::getCurrentCUDAStream()>>>(
             x2.data_ptr<scalar_t>(), w.data_ptr<scalar_t>(),
             out.data_ptr<scalar_t>(), (int)cols, (float)eps);
         C10_CUDA_KERNEL_LAUNCH_CHECK();

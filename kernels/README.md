@@ -66,5 +66,10 @@ hardware; the reference path is what runs in CI.
   stability, then cast back.
 - `AT_DISPATCH_FLOATING_TYPES` supports fp32/fp64; extend with
   `AT_DISPATCH_FLOATING_TYPES_AND_HALF` for fp16/bf16 serving.
+- Includes are kept to `c10/cuda/*` rather than the `ATen/cuda/CUDAContext.h`
+  umbrella. That umbrella drags in cusparse, cublas, cublasLt and cusolver
+  purely to hand back the current stream, which would make this extension
+  unbuildable against a CUDA install carrying nvcc and cudart but not the math
+  libraries — minimal toolkit images, slim containers, CI runners.
 - Next steps for a production kernel: vectorized (`float4`) loads, warp-shuffle
   reduction instead of shared memory, and a fused residual-add variant.

@@ -18,6 +18,8 @@ driver and is absent on a GPU-less machine. Building does not need it.
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,13 @@ sys.path.insert(0, str(ROOT / "src"))
 from llminf import rmsnorm as rms  # noqa: E402
 
 FUNCTIONS = ["rmsnorm_forward"]
+
+# torch derives -gencode flags from the *local* GPU; with no device it raises
+# IndexError deep inside _get_cuda_arch_flags. Naming the targets explicitly is
+# what makes a GPU-less build possible at all. These are the cards this repo is
+# actually run on -- 8.6 Ampere (RTX 3060 Ti), 8.9 Ada (RTX 4070) -- plus PTX so
+# the result stays forward-compatible.
+DEFAULT_ARCH_LIST = "8.6;8.9+PTX"
 
 
 def _generated_main_cpp(cpp_sources: str, functions: list[str]) -> str:
@@ -97,20 +106,36 @@ def build(cpp_sources: str, cuda_sources: str, workdir: Path) -> BuildResult:
     return BuildResult(ok, log, built[0] if built else None)
 
 
-def _require_toolchain() -> None:
+def _require_toolchain() -> str:
     if shutil.which("nvcc") is None:
         sys.exit("nvcc not found on PATH — install the CUDA toolkit (no GPU needed).")
     import torch
     if not hasattr(torch.version, "cuda") or torch.version.cuda is None:
         sys.exit(f"this torch build has no CUDA support (torch {torch.__version__}); "
                  "install a CUDA wheel, e.g. --index-url .../whl/cu124")
+    arch = os.environ.get("TORCH_CUDA_ARCH_LIST") or DEFAULT_ARCH_LIST
+    os.environ["TORCH_CUDA_ARCH_LIST"] = arch
     print(f"torch {torch.__version__} (cuda {torch.version.cuda}), "
-          f"nvcc {shutil.which('nvcc')}")
+          f"nvcc {shutil.which('nvcc')}, arch {arch}")
+    return arch
 
 
-def _tail(log: str, n: int = 40) -> str:
+_NOISE = re.compile(r"Error compiling objects|raise RuntimeError|subprocess\.")
+
+
+def _diagnostics(log: str, n: int = 60) -> str:
+    """The compiler's own complaint, not the Python traceback that reports it.
+
+    setuptools re-raises ninja failures as `RuntimeError: Error compiling
+    objects for extension`, so the last lines of the log are always the same
+    uninformative traceback while the nvcc/gcc diagnostic sits above it.
+    """
     lines = [ln for ln in log.splitlines() if ln.strip()]
-    return "\n".join(f"    {ln}" for ln in lines[-n:])
+    hits = [i for i, ln in enumerate(lines)
+            if re.search(r"\berror\b|^FAILED:", ln, re.I) and not _NOISE.search(ln)]
+    if hits:
+        lines = lines[max(0, hits[0] - 3):min(len(lines), hits[-1] + 4)]
+    return "\n".join(f"    {ln}" for ln in lines[:n])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -123,6 +148,27 @@ def main(argv: list[str] | None = None) -> int:
     tmp = Path(tempfile.mkdtemp(prefix="llminf-kernel-build-"))
     failures: list[str] = []
 
+    # A guard that cannot fail proves nothing -- but neither does one that always
+    # fails. Each case names the diagnostic that must appear, so a build broken
+    # for an unrelated reason is reported as inconclusive rather than counted as
+    # a pass. (This is not hypothetical: a missing TORCH_CUDA_ARCH_LIST once made
+    # every variant fail, and an earlier version of this script called that a
+    # clean sweep.)
+    cases = [
+        ("duplicate PYBIND11_MODULE in the CUDA source",
+         rms._CPP_SRC,
+         rms._CUDA_SRC + """
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("rmsnorm_forward", &rmsnorm_forward, "Fused RMSNorm forward (CUDA)");
+}
+""",
+         ("multiple definition", "PyInit_llminf_rmsnorm", "redefinition")),
+        ("cpp_sources missing the declaration",
+         "#include <torch/extension.h>\n",
+         rms._CUDA_SRC,
+         ("was not declared", "undeclared identifier", "has not been declared")),
+    ]
+
     try:
         print("\n[1] building the shipped sources ...")
         r = build(rms._CPP_SRC, rms._CUDA_SRC, tmp / "real")
@@ -130,33 +176,25 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    OK -> {r.artifact.name}")
         else:
             failures.append("the shipped kernel sources do not build")
-            print("    FAILED\n" + _tail(r.log))
+            print("    FAILED\n" + _diagnostics(r.log))
 
         if args.self_test:
-            # A guard that cannot fail proves nothing. Re-introduce each defect
-            # and require the build to reject it.
-            print("\n[2] self-test: duplicate PYBIND11_MODULE in the CUDA source ...")
-            dup = rms._CUDA_SRC + """
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("rmsnorm_forward", &rmsnorm_forward, "Fused RMSNorm forward (CUDA)");
-}
-"""
-            r2 = build(rms._CPP_SRC, dup, tmp / "dup")
-            if r2.ok:
-                failures.append("a duplicate PYBIND11_MODULE built successfully — "
-                                "this check would not catch the original defect")
-                print("    UNEXPECTEDLY OK")
-            else:
-                print("    rejected, as required")
-
-            print("\n[3] self-test: cpp_sources missing the declaration ...")
-            r3 = build("#include <torch/extension.h>\n", rms._CUDA_SRC, tmp / "nodecl")
-            if r3.ok:
-                failures.append("an undeclared rmsnorm_forward built successfully — "
-                                "this check would not catch the original defect")
-                print("    UNEXPECTEDLY OK")
-            else:
-                print("    rejected, as required")
+            for i, (label, cpp, cuda, expected) in enumerate(cases, start=2):
+                print(f"\n[{i}] self-test: {label} ...")
+                res = build(cpp, cuda, tmp / f"bad{i}")
+                if res.ok:
+                    failures.append(f"{label!r} built successfully — this check "
+                                    "would not catch the original defect")
+                    print("    UNEXPECTEDLY OK")
+                    continue
+                hit = next((tok for tok in expected if tok.lower() in res.log.lower()), None)
+                if hit:
+                    print(f"    rejected for the right reason ({hit!r})")
+                else:
+                    failures.append(
+                        f"{label!r} was rejected, but for none of {expected} — the "
+                        "self-test cannot confirm this guard catches the real defect")
+                    print("    REJECTED FOR THE WRONG REASON\n" + _diagnostics(res.log, 25))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
