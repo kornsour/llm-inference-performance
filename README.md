@@ -133,6 +133,10 @@ docs/                   methodology + generated results
 tests/                  correctness for every optimization (24 tests)
 ```
 
+`docs/archive/` holds historical/superseded documentation only — it does not
+describe the current state of the project and should not be used to inform new
+work or understand how the project works today.
+
 ## Design choices
 
 - **Random weights, real systems behavior.** This measures latency/throughput/
