@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import copy
 import platform
+import subprocess
+import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 import torch
 
@@ -20,6 +24,52 @@ from .generate import generate, timed_generate
 from .metrics import LatencyStats, PeakMemory, device_name, tensor_bytes
 from .model import GPT, GPTConfig
 from .quantize import logit_mse, model_size_bytes, quantize_int8
+
+# Number of `timed_generate` samples the quantization section's latency figure
+# is a median of. Kept apart from `BenchConfig.repeats` (the 5-sample count
+# behind sections 1-2's `LatencyStats.p50_ms`) so the two "p50-ish" numbers in
+# one report are never confused for the same statistic — see `bench_quantization`.
+QUANT_LATENCY_REPEATS = 3
+
+
+def _cpu_model() -> str:
+    """Best-effort CPU model string, e.g. 'Apple M4 Pro' or 'AMD EPYC 7742'.
+
+    `platform.platform()` and `platform.processor()` collapse to generic values
+    on macOS (e.g. 'arm') that cannot tell an M1 apart from an M4 — roughly a 2x
+    swing on exactly the numbers this harness reports. `sysctl` exposes the real
+    brand string there; everywhere else `platform.processor()` is the best
+    portable signal available.
+    """
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                capture_output=True, text=True, timeout=5, check=True,
+            )
+            brand = out.stdout.strip()
+            if brand:
+                return brand
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return platform.processor() or "unknown"
+
+
+def _git_sha() -> str:
+    """Short git SHA of the checkout that produced this report, or 'unknown'.
+
+    Lets a committed artifact be traced back to the exact code that produced
+    it, independent of whichever branch/tag happened to be checked out.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=True,
+            cwd=Path(__file__).resolve().parent,
+        )
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
 
 
 @dataclass
@@ -110,6 +160,13 @@ def bench_quantization(model: GPT, idx: torch.Tensor, new_tokens: int) -> dict:
     device it ran on so a `--device cuda` run is not misread as GPU latency.
     Both models are *copies*: `model.to("cpu")` would move the caller's model
     out from under the rest of the suite.
+
+    The latency figure here is a **plain median of `QUANT_LATENCY_REPEATS` (3)**
+    samples — a different statistic, from a different sample count, than
+    sections 1-2's `LatencyStats.p50_ms` (an interpolated 50th percentile of
+    `BenchConfig.repeats`, 5 by default). Both are called out by name
+    (`*_latency_ms_median` here vs `p50_ms` there) rather than sharing a "p50"
+    label that would imply they were computed the same way.
     """
     fp32 = copy.deepcopy(model).to("cpu").eval()
     qmodel = quantize_int8(fp32)
@@ -117,10 +174,10 @@ def bench_quantization(model: GPT, idx: torch.Tensor, new_tokens: int) -> dict:
     fp32_size = model_size_bytes(fp32)
     int8_size = model_size_bytes(qmodel)
 
-    def latency(m) -> float:
+    def median_latency(m) -> float:
         generate(m, idx_cpu, max_new_tokens=8, use_cache=True)
         samples = []
-        for _ in range(3):
+        for _ in range(QUANT_LATENCY_REPEATS):
             r = timed_generate(m, idx_cpu, new_tokens, use_cache=True)
             samples.append(r["total_ms"])
         return round(sorted(samples)[len(samples) // 2], 3)
@@ -130,8 +187,9 @@ def bench_quantization(model: GPT, idx: torch.Tensor, new_tokens: int) -> dict:
         "int8_size_mb": round(int8_size / 1e6, 3),
         "size_reduction_x": round(fp32_size / int8_size, 2) if int8_size else None,
         "latency_device": "cpu",
-        "fp32_latency_ms_p50": latency(fp32),
-        "int8_latency_ms_p50": latency(qmodel),
+        "latency_repeats": QUANT_LATENCY_REPEATS,
+        "fp32_latency_ms_median": median_latency(fp32),
+        "int8_latency_ms_median": median_latency(qmodel),
         "logit_mse": round(logit_mse(fp32, qmodel, idx_cpu), 6),
     }
 
@@ -148,10 +206,14 @@ def run_suite(device: str = "cpu", cfg: GPTConfig | None = None,
         "env": {
             "device": dev.type,
             "device_name": device_name(dev),
+            "cpu_model": _cpu_model(),
             "torch": torch.__version__,
             "python": platform.python_version(),
             "platform": platform.platform(),
             "threads": torch.get_num_threads(),
+            "timestamp_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "git_sha": _git_sha(),
+            "argv": sys.argv,
         },
         "model": {
             "params_m": round(model.num_params() / 1e6, 2),

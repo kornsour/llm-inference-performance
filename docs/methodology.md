@@ -8,7 +8,11 @@ don't claim.
 The headline metrics mirror what an inference team tracks:
 
 - **Latency** — p50 and p95 of end-to-end generation time, plus **TTFT**
-  (time-to-first-token = prefill time).
+  (time-to-first-token = prefill time). Both percentiles come from
+  `BenchConfig.repeats` timed samples (5 by default, called out beside each
+  column header as `n=`); with that few samples, p95 interpolates between the
+  4th and 5th largest, so treat it as "close to the max observed" rather than a
+  precise tail estimate. Raise `repeats` for a tighter p95.
 - **Throughput** — tokens/sec, aggregate across the batch.
 - **Memory** — the high-water mark of tensor bytes allocated *inside* a measured
   block, above whatever was already resident (model weights, prompt) on entry.
@@ -55,6 +59,17 @@ reproduces the same shapes and the same greedy outputs. Absolute timings vary
 with hardware and load; the **ratios** (speedup, size reduction) are the durable
 signal.
 
+## Provenance
+
+Every report's `env` block is self-describing: the CPU model (`sysctl
+machdep.cpu.brand_string` on macOS, `platform.processor()` elsewhere —
+`platform.platform()` alone collapses an M1 and an M4 to the same string),
+torch/Python versions, a UTC generation timestamp, the git SHA of the checkout
+that produced it, and the literal `argv` the run was invoked with. That is
+enough to tell, from the JSON alone, which machine, code, and command line a
+given set of numbers came from — no need to cross-reference the README or trust
+that it was captioned correctly.
+
 ## Honest caveats
 
 - **The KV-cache spends memory to buy speed.** `resident_kv_cache_mb` reports the
@@ -69,6 +84,13 @@ signal.
 - **CPU vs GPU.** This was developed on Apple Silicon (no NVIDIA GPU). The same
   harness runs on CUDA (`--device cuda`); the custom CUDA kernel and NCCL backend
   activate there. The committed numbers are CPU numbers and are labeled as such.
+- **Two different "p50"s in one report.** Sections 1-2's p50/p95 come from
+  `LatencyStats`, an interpolated percentile of `BenchConfig.repeats` (5)
+  timed-generate samples. Section 3's quantization latency is a **plain
+  median of `QUANT_LATENCY_REPEATS` (3)** samples — named
+  `fp32_latency_ms_median` / `int8_latency_ms_median`, not `*_p50`, and its
+  table column says "median of 3" rather than reusing the "p50" label, so the
+  two are never mistaken for the same statistic computed the same way.
 - **int8 latency on CPU.** Dynamic int8 quantization's headline win here is
   **model size / memory**; on CPU (qnnpack) at this model scale it does **not**
   reduce latency and can increase it — this is reported rather than hidden. The

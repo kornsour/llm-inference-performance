@@ -33,21 +33,22 @@ backend activate.
 
 Reproduce with `make bench`. Numbers below: ~11M-param decoder
 (6 layers / 6 heads / 384 d), prompt 64 → 128 new tokens, CPU (Apple Silicon),
-PyTorch 2.13. Full machine-readable report in
+PyTorch 2.13, Python 3.14. Full machine-readable report — self-describing with
+CPU model, git SHA, and UTC timestamp — in
 [`benchmarks/results/latest.json`](benchmarks/results/latest.json); rendered page
 in [`docs/results.md`](docs/results.md).
 
-![Measured optimizations: KV-cache 4.8× faster decode, batching 3.4× at batch 16, int8 3.63× smaller](docs/img/results.svg)
+![Measured optimizations: KV-cache 4.8× faster decode, batching 3.3× at batch 16, int8 3.63× smaller](docs/img/results.svg)
 
 ### 1. KV-cache — **4.8× faster decode**
 
 Greedy decoding, so cache-on and cache-off produce **identical tokens** (asserted
 in tests) — a clean like-for-like comparison.
 
-| variant | tokens/sec | p50 latency (ms) | p95 latency (ms) | peak mem (MB) |
+| variant | tokens/sec | p50 latency (ms, n=5) | p95 latency (ms, n=5) | peak mem (MB) |
 | --- | --- | --- | --- | --- |
-| no cache — recompute prefix each step, O(T²) | 210 | 608 | 613 | 9.0 |
-| **KV-cache** — decode O(T) | **1009** | **127** | **127** | **7.04** |
+| no cache — recompute prefix each step, O(T²) | 212 | 603 | 604 | 9.0 |
+| **KV-cache** — decode O(T) | **1014** | **125** | **131** | **7.04** |
 
 **The cache costs memory, it doesn't save it.** It holds **3.52 MB** of K/V
 resident at 192 tokens, growing linearly with sequence length and batch size —
@@ -57,22 +58,27 @@ attention intermediates; and most of the 7.04 MB is the `torch.cat` that grows
 the cache one token at a time, holding old and new buffers at once (a
 preallocated cache is the standard fix). Peak memory is the high-water mark of
 tensor bytes allocated inside each decode, above the resident model — see
-[`docs/methodology.md`](docs/methodology.md).
+[`docs/methodology.md`](docs/methodology.md). p50/p95 are from 5 timed
+samples — with that few, p95 is close to the max observed rather than a
+precise tail estimate.
 
-### 2. Batching — **3.4× throughput** at batch 16
+### 2. Batching — **3.3× throughput** at batch 16
 
 | batch size | 1 | 2 | 4 | 8 | 16 |
 | --- | --- | --- | --- | --- | --- |
-| tokens/sec | 1010 | 956 | 1765 | 3096 | 3460 |
-| speedup vs b=1 | 1.0× | 0.95× | 1.75× | 3.06× | **3.42×** |
+| tokens/sec | 1011 | 956 | 1742 | 3104 | 3322 |
+| speedup vs b=1 | 1.0× | 0.95× | 1.72× | 3.07× | **3.28×** |
 
 ### 3. int8 dynamic quantization — **3.6× smaller**
 
 | metric | fp32 | int8 | delta |
 | --- | --- | --- | --- |
 | model size (MB) | 43.8 | 12.1 | **3.63× smaller** |
-| p50 latency (ms) | 127 | 216 | *slower on CPU — see note* |
+| latency (ms), median of 3 | 123 | 214 | *slower on CPU — see note* |
 | logit MSE (fp32→int8) | — | — | 3.3e-04 |
+
+This latency is a plain **median of 3 samples**, not the same statistic as the
+p50 above it — see [`docs/methodology.md`](docs/methodology.md#honest-caveats).
 
 **Honest finding:** dynamic int8's win here is **size/memory**. On CPU (qnnpack) at
 this scale it does *not* reduce latency and can increase it; the int8 GEMM speedup
