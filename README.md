@@ -46,6 +46,12 @@ two runs comparable (git SHA, device, model shape, benchmark config). Run
 with the spread across them — so a headline ratio like "4.8× faster" reads as
 a distribution, not a single sample.
 
+CI goes one step further and **gates** on that history: `make bench-compare`
+diffs a fresh run against a stored baseline for the same configuration and
+fails the build if tokens/sec, p95 latency, peak memory, or the KV-cache
+speedup regress past a threshold calibrated from measured CI-runner noise —
+see [`docs/bench-compare.md`](docs/bench-compare.md).
+
 ![Measured optimizations: KV-cache 4.8× faster decode, batching 3.3× at batch 16, int8 3.63× smaller](docs/img/results.svg)
 
 ### 1. KV-cache — **4.8× faster decode**
@@ -139,6 +145,8 @@ make test         # tests, incl. the 2-process gloo tensor-parallel check
 make tp-demo      # tensor-parallel + all-reduce micro-benchmark
 make bench-quick  # fast smoke run
 make bench-history # last N runs for the current config, from history.duckdb
+make bench-compare # gate a fresh run against the stored baseline (see docs/bench-compare.md)
+make bench-baseline-update # move the bench-compare baseline (deliberate, documented)
 make check-kernel # compile + link the CUDA kernel (needs nvcc, but no GPU)
 
 # On a GPU box, the same harness:
@@ -156,7 +164,7 @@ src/llminf/
 ├── quantize.py         int8 dynamic quantization (size, latency, logit drift)
 ├── metrics.py          latency percentiles + device-aware peak-memory probe
 ├── bench.py            the benchmark harness
-├── history.py          append-only run history (DuckDB) + matching-config queries
+├── history.py          append-only run history (DuckDB) + matching-config queries + baseline
 ├── rmsnorm.py          fused-RMSNorm dispatch (CUDA kernel ↔ PyTorch reference)
 └── distributed/
     └── tensor_parallel.py   column/row-parallel linear + TP MLP (gloo/NCCL)
@@ -165,8 +173,10 @@ benchmarks/run_all.py   runs everything, writes results + appends to history.duc
 benchmarks/results/history.duckdb   every run ever made, queryable (committed)
 scripts/tp_demo.py      torchrun entrypoint
 scripts/bench_history.py   `make bench-history` — recent runs + spread for the current config
+scripts/bench_compare.py   `make bench-compare` — gate a run against its stored baseline (CI)
+scripts/bench_noise.py   `make bench-noise` — sample bench-compare's config N times, report spread
 scripts/check_kernel_builds.py   compile+link the CUDA extension (no GPU needed)
-docs/                   methodology + generated results
+docs/                   methodology + generated results + docs/bench-compare.md
 tests/                  correctness for every optimization (39 tests)
 ```
 

@@ -1,0 +1,58 @@
+name: Update benchmark baseline
+
+# The one documented way to move `make bench-compare`'s baseline on the exact
+# hardware/OS CI itself gates on (a GitHub Actions `ubuntu-latest` CPU
+# runner), rather than approximating it from a laptop — see
+# docs/bench-compare.md. Manual and explicit by design: this never runs on a
+# normal push/PR, only when a maintainer dispatches it deliberately (e.g.
+# after a measured, accepted trade-off).
+#
+#   gh workflow run bench-baseline.yml --ref <branch> -f config=quick
+on:
+  workflow_dispatch:
+    inputs:
+      config:
+        description: "bench_compare.py configuration to record as the new baseline"
+        required: false
+        default: quick
+        type: choice
+        options: [quick, full]
+
+permissions:
+  contents: write
+
+jobs:
+  update-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (CPU torch)
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Record the new baseline
+        id: record
+        run: |
+          FLAG=""
+          if [ "${{ inputs.config }}" = "full" ]; then FLAG="--full"; fi
+          python scripts/bench_compare.py --update-baseline $FLAG | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push the updated history store
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add benchmarks/results/history.duckdb
+          if git diff --cached --quiet; then
+            echo "No change to commit."
+          else
+            git commit -m "chore(bench): move the ${{ inputs.config }} bench-compare baseline [skip ci]"
+            git push
+          fi

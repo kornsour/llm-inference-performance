@@ -1,0 +1,44 @@
+name: Benchmark noise calibration
+
+# Runs scripts/bench_noise.py on a real GitHub Actions `ubuntu-latest` CPU
+# runner and posts the spread to the job summary — how `bench_compare.py`'s
+# default `--max-*-pct` thresholds were set (see docs/bench-compare.md), and
+# how to re-check them if the runner class or the compare configuration
+# changes. Manual only: it is a calibration tool, not a gate, and repeating
+# the suite N times is not worth paying for on every push/PR.
+#
+#   gh workflow run bench-noise.yml --ref <branch> -f repeats=10 -f config=quick
+on:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: "number of suite runs to sample"
+        required: false
+        default: "10"
+      config:
+        description: "bench_compare.py configuration to sample"
+        required: false
+        default: quick
+        type: choice
+        options: [quick, full]
+
+jobs:
+  noise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies (CPU torch)
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Sample noise
+        run: |
+          FLAG=""
+          if [ "${{ inputs.config }}" = "full" ]; then FLAG="--full"; fi
+          python scripts/bench_noise.py -n "${{ inputs.repeats }}" $FLAG
