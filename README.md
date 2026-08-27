@@ -38,6 +38,14 @@ CPU model, git SHA, and UTC timestamp — in
 [`benchmarks/results/latest.json`](benchmarks/results/latest.json); rendered page
 in [`docs/results.md`](docs/results.md).
 
+`latest.json` only ever holds the most recent run, so every `make bench` also
+appends a row to [`benchmarks/results/history.duckdb`](benchmarks/results/history.duckdb)
+— a committed, queryable log of every run, keyed by the dimensions that make
+two runs comparable (git SHA, device, model shape, benchmark config). Run
+`make bench-history` to see the last N runs for the current configuration,
+with the spread across them — so a headline ratio like "4.8× faster" reads as
+a distribution, not a single sample.
+
 ![Measured optimizations: KV-cache 4.8× faster decode, batching 3.3× at batch 16, int8 3.63× smaller](docs/img/results.svg)
 
 ### 1. KV-cache — **4.8× faster decode**
@@ -118,6 +126,7 @@ make bench        # full suite -> docs/results.md + JSON
 make test         # tests, incl. the 2-process gloo tensor-parallel check
 make tp-demo      # tensor-parallel + all-reduce micro-benchmark
 make bench-quick  # fast smoke run
+make bench-history # last N runs for the current config, from history.duckdb
 make check-kernel # compile + link the CUDA kernel (needs nvcc, but no GPU)
 
 # On a GPU box, the same harness:
@@ -135,15 +144,18 @@ src/llminf/
 ├── quantize.py         int8 dynamic quantization (size, latency, logit drift)
 ├── metrics.py          latency percentiles + device-aware peak-memory probe
 ├── bench.py            the benchmark harness
+├── history.py          append-only run history (DuckDB) + matching-config queries
 ├── rmsnorm.py          fused-RMSNorm dispatch (CUDA kernel ↔ PyTorch reference)
 └── distributed/
     └── tensor_parallel.py   column/row-parallel linear + TP MLP (gloo/NCCL)
 kernels/                the CUDA kernel source + notes
-benchmarks/run_all.py   runs everything, writes results
+benchmarks/run_all.py   runs everything, writes results + appends to history.duckdb
+benchmarks/results/history.duckdb   every run ever made, queryable (committed)
 scripts/tp_demo.py      torchrun entrypoint
+scripts/bench_history.py   `make bench-history` — recent runs + spread for the current config
 scripts/check_kernel_builds.py   compile+link the CUDA extension (no GPU needed)
 docs/                   methodology + generated results
-tests/                  correctness for every optimization (24 tests)
+tests/                  correctness for every optimization (39 tests)
 ```
 
 `docs/archive/` holds historical/superseded documentation only — it does not

@@ -18,6 +18,10 @@ benchmarks/results/*.json
 !benchmarks/results/latest.json
 !benchmarks/results/tp_latest.json
 
+# benchmarks/results/history.duckdb *is* committed (it's the whole point — see
+# llminf.history) — only an uncheckpointed write-ahead log is transient here.
+*.duckdb.wal
+
 # OS / editor
 .DS_Store
 .idea/

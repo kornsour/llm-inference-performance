@@ -7,8 +7,8 @@
     "python": "3.14.7",
     "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
     "threads": 6,
-    "timestamp_utc": "2026-08-27T16:00:35+00:00",
-    "git_sha": "5ebc3bf",
+    "timestamp_utc": "2026-08-27T17:49:00+00:00",
+    "git_sha": "053f606",
     "argv": [
       "benchmarks/run_all.py"
     ]
@@ -30,64 +30,64 @@
     "cache_off": {
       "latency": {
         "n": 5,
-        "p50_ms": 781.167,
-        "p95_ms": 839.247,
-        "mean_ms": 789.587
+        "p50_ms": 710.468,
+        "p95_ms": 718.652,
+        "mean_ms": 707.497
       },
-      "ttft_ms_p50": 2.937,
-      "tokens_per_s_mean": 162.44,
+      "ttft_ms_p50": 2.799,
+      "tokens_per_s_mean": 180.96,
       "peak_mem_mb": 9.0
     },
     "cache_on": {
       "latency": {
         "n": 5,
-        "p50_ms": 190.531,
-        "p95_ms": 216.138,
-        "mean_ms": 196.526
+        "p50_ms": 135.815,
+        "p95_ms": 144.954,
+        "mean_ms": 137.929
       },
-      "ttft_ms_p50": 3.27,
-      "tokens_per_s_mean": 655.02,
+      "ttft_ms_p50": 2.9,
+      "tokens_per_s_mean": 929.02,
       "peak_mem_mb": 7.04
     },
-    "speedup_x": 4.03,
+    "speedup_x": 5.13,
     "resident_kv_cache_mb": 3.52
   },
   "batching": {
     "rows": [
       {
         "batch_size": 1,
-        "elapsed_s": 0.1863,
-        "tokens_per_s": 687.23,
+        "elapsed_s": 0.1362,
+        "tokens_per_s": 939.64,
         "total_tokens": 128,
         "speedup_vs_b1": 1.0
       },
       {
         "batch_size": 2,
-        "elapsed_s": 0.391,
-        "tokens_per_s": 654.66,
+        "elapsed_s": 0.3147,
+        "tokens_per_s": 813.49,
         "total_tokens": 256,
-        "speedup_vs_b1": 0.95
+        "speedup_vs_b1": 0.87
       },
       {
         "batch_size": 4,
-        "elapsed_s": 0.4241,
-        "tokens_per_s": 1207.23,
+        "elapsed_s": 0.2907,
+        "tokens_per_s": 1761.01,
         "total_tokens": 512,
-        "speedup_vs_b1": 1.76
+        "speedup_vs_b1": 1.87
       },
       {
         "batch_size": 8,
-        "elapsed_s": 0.432,
-        "tokens_per_s": 2370.16,
+        "elapsed_s": 0.4232,
+        "tokens_per_s": 2419.77,
         "total_tokens": 1024,
-        "speedup_vs_b1": 3.45
+        "speedup_vs_b1": 2.58
       },
       {
         "batch_size": 16,
-        "elapsed_s": 0.9165,
-        "tokens_per_s": 2234.55,
+        "elapsed_s": 1.1297,
+        "tokens_per_s": 1812.86,
         "total_tokens": 2048,
-        "speedup_vs_b1": 3.25
+        "speedup_vs_b1": 1.93
       }
     ]
   },
@@ -97,8 +97,8 @@
     "size_reduction_x": 3.64,
     "latency_device": "cpu",
     "latency_repeats": 3,
-    "fp32_latency_ms_median": 159.228,
-    "int8_latency_ms_median": 393.372,
+    "fp32_latency_ms_median": 263.166,
+    "int8_latency_ms_median": 224.251,
     "logit_mse": 0.000345
   },
   "rmsnorm": {
@@ -107,47 +107,47 @@
       {
         "rows": 1,
         "cols": 384,
-        "unfused_latency_ms_p50": 0.00445,
-        "fused_latency_ms_p50": 0.00448,
-        "unfused_gbps": 0.691,
-        "fused_gbps": 0.686,
-        "speedup_x": 0.99
+        "unfused_latency_ms_p50": 0.00429,
+        "fused_latency_ms_p50": 0.00429,
+        "unfused_gbps": 0.717,
+        "fused_gbps": 0.717,
+        "speedup_x": 1.0
       },
       {
         "rows": 64,
         "cols": 384,
-        "unfused_latency_ms_p50": 0.01117,
-        "fused_latency_ms_p50": 0.01133,
-        "unfused_gbps": 17.603,
-        "fused_gbps": 17.354,
-        "speedup_x": 0.99
+        "unfused_latency_ms_p50": 0.01094,
+        "fused_latency_ms_p50": 0.01116,
+        "unfused_gbps": 17.965,
+        "fused_gbps": 17.62,
+        "speedup_x": 0.98
       },
       {
         "rows": 1,
         "cols": 4096,
-        "unfused_latency_ms_p50": 0.00681,
-        "fused_latency_ms_p50": 0.00519,
-        "unfused_gbps": 4.81,
-        "fused_gbps": 6.317,
-        "speedup_x": 1.31
+        "unfused_latency_ms_p50": 0.00472,
+        "fused_latency_ms_p50": 0.00469,
+        "unfused_gbps": 6.941,
+        "fused_gbps": 6.987,
+        "speedup_x": 1.01
       },
       {
         "rows": 1024,
         "cols": 384,
-        "unfused_latency_ms_p50": 0.1741,
-        "fused_latency_ms_p50": 0.16214,
-        "unfused_gbps": 18.069,
-        "fused_gbps": 19.401,
-        "speedup_x": 1.07
+        "unfused_latency_ms_p50": 0.10748,
+        "fused_latency_ms_p50": 0.10751,
+        "unfused_gbps": 29.269,
+        "fused_gbps": 29.259,
+        "speedup_x": 1.0
       },
       {
         "rows": 1024,
         "cols": 4096,
-        "unfused_latency_ms_p50": 0.70764,
-        "fused_latency_ms_p50": 0.66225,
-        "unfused_gbps": 47.417,
-        "fused_gbps": 50.667,
-        "speedup_x": 1.07
+        "unfused_latency_ms_p50": 0.61204,
+        "fused_latency_ms_p50": 0.59377,
+        "unfused_gbps": 54.824,
+        "fused_gbps": 56.511,
+        "speedup_x": 1.03
       }
     ]
   }

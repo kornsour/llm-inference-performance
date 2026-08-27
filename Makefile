@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 PY := uv run
 
-.PHONY: help install bench bench-quick tp-demo test check-kernel lint fmt clean
+.PHONY: help install bench bench-quick bench-history tp-demo test check-kernel lint fmt clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -17,6 +17,9 @@ bench: ## Run the full benchmark suite (writes docs/results.md + JSON)
 
 bench-quick: ## Fast smoke benchmark (tiny model)
 	$(PY) python benchmarks/run_all.py --quick
+
+bench-history: ## Print recent benchmark history for the current configuration
+	$(PY) python scripts/bench_history.py $(ARGS)
 
 tp-demo: ## Tensor-parallel demo + all-reduce micro-benchmark (2 procs, gloo)
 	$(PY) torchrun --nproc_per_node=2 scripts/tp_demo.py
