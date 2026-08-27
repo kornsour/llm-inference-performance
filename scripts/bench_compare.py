@@ -35,11 +35,11 @@ to compare against, which is expected the first time a device/model/workload
 combination is gated (see `--update-baseline` below).
 
 Default thresholds come from the noise band measured on a GitHub Actions
-`ubuntu-latest` CPU runner (`scripts/bench_noise.py`) for exactly the `quick`
-configuration below — see `docs/bench-compare.md` for the measurement run and
-the numbers behind them. They are wider for `--full` runs, which have not
-been separately calibrated and vary more (also a bigger model, on whatever
-machine happens to run `make bench`).
+`ubuntu-latest` CPU runner (`scripts/bench_noise.py`, n=10) for exactly the
+`quick` configuration below — see `docs/bench-compare.md` for the measurement
+run and the numbers behind them. They are wider for `--full` runs, which have
+not been separately calibrated and vary more (also a bigger model, on
+whatever machine happens to run `make bench`).
 
 `--update-baseline` records the freshly-run report as the new baseline for
 its configuration instead of gating — the one documented way to move the
@@ -75,18 +75,23 @@ from llminf.model import GPTConfig  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# See the module docstring: calibrated for `quick` on a GitHub Actions
-# `ubuntu-latest` CPU runner (docs/bench-compare.md). `full` thresholds are
-# deliberately wider — not separately calibrated, and a bigger model on
+# See the module docstring: calibrated from scripts/bench_noise.py, n=10, on
+# a GitHub Actions `ubuntu-latest` CPU runner (docs/bench-compare.md has the
+# full table). Observed max deviation from the mean, that run: tokens/sec
+# 0.7%, p95 3.6%, peak mem 0.0% (this tiny model's KV-cache footprint rounds
+# to a fixed 0.3 MB), speedup_x 1.8%. Thresholds below are ~4-15x that,
+# tighter where the signal was cleanest (throughput, speedup) and wider where
+# rounding could hide real movement (peak mem). `full` thresholds are
+# deliberately wider still — not separately calibrated, and a bigger model on
 # whatever machine happens to run `make bench` moves more between samples.
-DEFAULT_MAX_THROUGHPUT_DROP_PCT = 25.0
-DEFAULT_MAX_P95_RISE_PCT = 35.0
-DEFAULT_MAX_MEM_RISE_PCT = 30.0
-DEFAULT_MAX_SPEEDUP_DROP_PCT = 25.0
-FULL_MAX_THROUGHPUT_DROP_PCT = 35.0
-FULL_MAX_P95_RISE_PCT = 45.0
-FULL_MAX_MEM_RISE_PCT = 40.0
-FULL_MAX_SPEEDUP_DROP_PCT = 35.0
+DEFAULT_MAX_THROUGHPUT_DROP_PCT = 10.0
+DEFAULT_MAX_P95_RISE_PCT = 15.0
+DEFAULT_MAX_MEM_RISE_PCT = 20.0
+DEFAULT_MAX_SPEEDUP_DROP_PCT = 12.0
+FULL_MAX_THROUGHPUT_DROP_PCT = 25.0
+FULL_MAX_P95_RISE_PCT = 35.0
+FULL_MAX_MEM_RISE_PCT = 30.0
+FULL_MAX_SPEEDUP_DROP_PCT = 25.0
 
 
 def compare_config(full: bool) -> tuple[GPTConfig, BenchConfig]:

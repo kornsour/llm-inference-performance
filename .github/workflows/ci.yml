@@ -56,50 +56,6 @@ jobs:
           path: benchmarks/results/*.json
           if-no-files-found: ignore
 
-  # TEMPORARY — bootstraps the very first bench-compare baseline + noise
-  # measurement for docs/bench-compare.md on a real GitHub Actions
-  # ubuntu-latest runner, from inside this PR (`workflow_dispatch` workflows
-  # — bench-baseline.yml / bench-noise.yml, which do this from here on out —
-  # can't be dispatched until they exist on the default branch). Removed in
-  # a follow-up commit on this same PR once its output is captured; not part
-  # of the feature.
-  bootstrap-baseline:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      - uses: astral-sh/setup-uv@v5
-
-      - name: Install dependencies (CPU torch)
-        run: uv pip install --system -e ".[dev]"
-
-      - name: Noise calibration (n=10)
-        run: python scripts/bench_noise.py -n 10
-
-      - name: Record the quick-config baseline
-        run: python scripts/bench_compare.py --update-baseline | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Commit and push the baseline
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add benchmarks/results/history.duckdb
-          if git diff --cached --quiet; then
-            echo "No change to commit."
-          else
-            git commit -m "chore(bench): bootstrap the quick bench-compare baseline [skip ci]"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
   # The CUDA kernel is dispatched to only on a GPU, so nothing in `test` ever
   # compiles it — which is exactly how it shipped broken. nvcc needs no GPU to
   # compile and link, so this runs on an ordinary runner and closes that gap.

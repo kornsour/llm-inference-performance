@@ -23,10 +23,10 @@ speedup ratio), but nothing consumed them as a gate. `make bench-compare`
 
    | metric | direction that fails | default threshold (`quick`) |
    | --- | --- | --- |
-   | `tokens_per_s_mean` (cache-on) | falls | 25% below baseline |
-   | `p95_ms` (cache-on) | rises | 35% above baseline |
-   | `peak_mem_mb` (cache-on) | rises | 30% above baseline |
-   | `speedup_x` (cache-on / cache-off) | falls | 25% below baseline |
+   | `tokens_per_s_mean` (cache-on) | falls | 10% below baseline |
+   | `p95_ms` (cache-on) | rises | 15% above baseline |
+   | `peak_mem_mb` (cache-on) | rises | 20% above baseline |
+   | `speedup_x` (cache-on / cache-off) | falls | 12% below baseline |
 
    Batching speedup, int8 size reduction, and fused-RMSNorm speedup are
    reported in the same table for visibility (a PR should show its
@@ -96,20 +96,44 @@ fail on noise alone, before a regression has to add anything on top of it.
 
 The measurement backing this repo's defaults was taken on a GitHub Actions
 `ubuntu-latest` CPU runner — a shared, virtualized machine, noisier than a
-quiet laptop and the actual environment `make bench-compare` gates in CI —
-via:
+quiet laptop and the actual environment `make bench-compare` gates in CI.
+`bench-noise.yml`/`bench-baseline.yml` can't be `workflow_dispatch`ed until
+they exist on `main` (a GitHub Actions restriction — the workflow file has to
+be registered on the default branch first), so for this repo's *first*
+calibration and baseline the equivalent commands ran as a one-off job inside
+[PR #22](https://github.com/kornsour/llm-inference-performance/pull/22)'s own
+CI instead ([run
+33120556658](https://github.com/kornsour/llm-inference-performance/actions/runs/33120556658),
+job `bootstrap-baseline`, 2026-08-27, `ubuntu-latest`, torch `2.13.0+cu130`,
+Python 3.14.7). From here on, re-calibrating is:
 
 ```bash
 gh workflow run bench-noise.yml --ref <branch> -f repeats=10 -f config=quick
 ```
 
-<!-- RESULTS_PLACEHOLDER -->
+Ten repeats of `bench_compare.py`'s `quick` configuration, n=10, measured:
 
-Thresholds are set well above the observed spread (roughly 2-4x the largest
-deviation from the mean), not right at it — a gate that fails on noise
-half the time trains people to ignore it, which is worse than not having one.
-If the runner class changes (GitHub changes the `ubuntu-latest` image, the
-model/workload shape in `compare_config()` changes) re-run
+```
+tokens_per_s_mean (cache-on)     min       1519  mean       1529  max       1540  stdev     6.404  max |dev| from mean:   0.7%
+p95_ms (cache-on)                min      21.06  mean      21.31  max      22.07  stdev    0.2812  max |dev| from mean:   3.6%
+peak_mem_mb (cache-on)           min        0.3  mean        0.3  max        0.3  stdev         0  max |dev| from mean:   0.0%
+speedup_x                        min       1.42  mean      1.434  max       1.46  stdev   0.01265  max |dev| from mean:   1.8%
+```
+
+`peak_mem_mb`'s 0.0% isn't the metric being perfectly stable — it's this
+tiny model's KV-cache footprint rounding to a fixed 0.3 MB at the precision
+`bench.py` reports, so the real spread underneath is invisible at n=10. The
+`--max-mem-rise-pct` default is set wider than the others for exactly that
+reason: a threshold this metric's own noise sample can't actually justify
+needs the extra margin.
+
+Thresholds in `scripts/bench_compare.py` are set well above the observed
+spread — roughly 4-15x the largest deviation from the mean, tighter where
+the signal was clean (throughput, speedup) and wider where rounding could be
+hiding real movement (peak mem) — not right at it: a gate that fails on
+noise half the time trains people to ignore it, which is worse than not
+having one. If the runner class changes (GitHub changes the `ubuntu-latest`
+image, the model/workload shape in `compare_config()` changes) re-run
 `bench-noise.yml` and revisit the `DEFAULT_MAX_*_PCT` constants at the top of
 `scripts/bench_compare.py`.
 
