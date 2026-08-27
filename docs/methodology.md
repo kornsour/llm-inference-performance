@@ -46,7 +46,7 @@ What **is** asserted in tests is that every optimization is
 | Optimization | Baseline | Variant | What the delta isolates |
 | --- | --- | --- | --- |
 | KV-cache | recompute full prefix each step (O(T²)) | cache K/V, decode O(T) | redundant attention compute (bought with resident K/V memory) |
-| Batching | batch size 1 | batch size 2…16 | matmul utilization |
+| Static batching | batch size 1 | batch size 2…16, ragged prompts | matmul utilization |
 | int8 quant | fp32 weights | int8 dynamic | model size & memory bandwidth |
 | Fused RMSNorm | `pow → mean → rsqrt → mul → mul` (separate ops) | single fused kernel (CUDA) / same reference elsewhere | achieved GB/s of a bandwidth-bound op |
 
@@ -109,6 +109,18 @@ that it was captioned correctly.
   rather than a kernel that sits unused next to the harness; on CPU both
   columns land on the same numbers because they're the same code path, which
   is reported (`backend`) rather than hidden.
+- **This is static batching, not continuous batching.** Each row of section 2 is
+  `batch_size` independent prompts of *varying* length — left-padded to a
+  common width, decoded together with a correct attention mask (see
+  `batching.py`, `GPT._build_attn_bias`) — rather than one prompt duplicated
+  `batch_size` times, which would never exercise padding. But the whole batch
+  is still assembled up front and walked to a fixed length together: no
+  sequence is admitted or evicted mid-flight as others finish early, which is
+  what production serving's continuous batching does and what actually
+  determines goodput under real traffic. `test_ragged_batch_matches_each_prompt_generated_alone`
+  is the correctness check that padding and masking don't leak across rows;
+  the throughput scaling itself is a static-batching number and is labeled
+  as such rather than as "request batching."
 - **Batching on CPU** scales sub-linearly (limited cores / memory bandwidth); the
   trend is real but a GPU shows much steeper throughput scaling.
 - **Tensor parallelism** uses gloo on CPU so the collective path is testable; on
