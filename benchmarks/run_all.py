@@ -3,7 +3,10 @@
     python benchmarks/run_all.py                 # CPU
     python benchmarks/run_all.py --device cuda    # GPU (same harness)
 
-Writes benchmarks/results/latest.json and docs/results.md.
+Writes benchmarks/results/latest.json and docs/results.md, and appends the
+run to benchmarks/results/history.duckdb (see llminf.history and
+`make bench-history`) so this run is compared against past ones instead of
+overwriting them.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from llminf import history  # noqa: E402
 from llminf.bench import BenchConfig, run_suite  # noqa: E402
 from llminf.model import GPTConfig  # noqa: E402
 
@@ -137,7 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     (results_dir / "latest.json").write_text(json.dumps(report, indent=2))
     (ROOT / "docs").mkdir(exist_ok=True)
     (ROOT / "docs" / "results.md").write_text(md)
-    print("wrote benchmarks/results/latest.json and docs/results.md")
+    history.append_run(report)
+    print("wrote benchmarks/results/latest.json, docs/results.md, "
+          "and appended a row to benchmarks/results/history.duckdb "
+          "(see `make bench-history`)")
     return 0
 
 
