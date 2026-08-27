@@ -75,23 +75,32 @@ from llminf.model import GPTConfig  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# See the module docstring: calibrated from scripts/bench_noise.py, n=10, on
-# a GitHub Actions `ubuntu-latest` CPU runner (docs/bench-compare.md has the
-# full table). Observed max deviation from the mean, that run: tokens/sec
-# 0.7%, p95 3.6%, peak mem 0.0% (this tiny model's KV-cache footprint rounds
-# to a fixed 0.3 MB), speedup_x 1.8%. Thresholds below are ~4-15x that,
-# tighter where the signal was cleanest (throughput, speedup) and wider where
-# rounding could hide real movement (peak mem). `full` thresholds are
-# deliberately wider still — not separately calibrated, and a bigger model on
+# See docs/bench-compare.md for the full measurement this is based on.
+# scripts/bench_noise.py's in-process n=10 sample (one runner, ten
+# back-to-back repeats) showed tight noise: max deviation from the mean 0.7%
+# (tokens/sec), 3.6% (p95), 0.0% (peak mem — this tiny model's KV-cache
+# footprint rounds to a fixed 0.3 MB), 1.8% (speedup_x). But three
+# independent CI *job* runs of the identical code/config told a different
+# story: two landed within ~1-3% of each other, one differed from both by
+# ~28-30% on raw tokens/sec and p95 — GitHub's `ubuntu-latest` label spans
+# more than one physical host generation, and which one a job lands on moves
+# raw throughput by more than ten in-process repeats on a single host ever
+# will. `speedup_x` (cache-on / cache-off, both measured in the same job)
+# stayed much closer across all three (2.8-11.2%) — it's a same-run ratio,
+# so a host-speed difference mostly cancels out of it. Thresholds below are
+# set above the observed *cross-job* spread, not the tighter in-process one:
+# comfortable margin over ~30% for the two raw metrics, tighter for the
+# ratio and for peak-mem (stable in every sample taken). `full` thresholds
+# are wider still — not separately calibrated, and a bigger model on
 # whatever machine happens to run `make bench` moves more between samples.
-DEFAULT_MAX_THROUGHPUT_DROP_PCT = 10.0
-DEFAULT_MAX_P95_RISE_PCT = 15.0
-DEFAULT_MAX_MEM_RISE_PCT = 20.0
-DEFAULT_MAX_SPEEDUP_DROP_PCT = 12.0
-FULL_MAX_THROUGHPUT_DROP_PCT = 25.0
-FULL_MAX_P95_RISE_PCT = 35.0
-FULL_MAX_MEM_RISE_PCT = 30.0
-FULL_MAX_SPEEDUP_DROP_PCT = 25.0
+DEFAULT_MAX_THROUGHPUT_DROP_PCT = 45.0
+DEFAULT_MAX_P95_RISE_PCT = 45.0
+DEFAULT_MAX_MEM_RISE_PCT = 25.0
+DEFAULT_MAX_SPEEDUP_DROP_PCT = 25.0
+FULL_MAX_THROUGHPUT_DROP_PCT = 55.0
+FULL_MAX_P95_RISE_PCT = 55.0
+FULL_MAX_MEM_RISE_PCT = 35.0
+FULL_MAX_SPEEDUP_DROP_PCT = 35.0
 
 
 def compare_config(full: bool) -> tuple[GPTConfig, BenchConfig]:
