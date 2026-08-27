@@ -2,7 +2,8 @@
 .DEFAULT_GOAL := help
 PY := uv run
 
-.PHONY: help install bench bench-quick bench-history tp-demo test check-kernel lint fmt clean
+.PHONY: help install bench bench-quick bench-history bench-compare bench-compare-full \
+	bench-baseline-update bench-noise tp-demo test check-kernel lint fmt clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -20,6 +21,18 @@ bench-quick: ## Fast smoke benchmark (tiny model)
 
 bench-history: ## Print recent benchmark history for the current configuration
 	$(PY) python scripts/bench_history.py $(ARGS)
+
+bench-compare: ## Gate the quick benchmark config against its stored baseline (CI does this)
+	$(PY) python scripts/bench_compare.py $(ARGS)
+
+bench-compare-full: ## Gate the full `make bench` config against its stored baseline
+	$(PY) python scripts/bench_compare.py --full $(ARGS)
+
+bench-baseline-update: ## Record the current quick-config numbers as the new bench-compare baseline
+	$(PY) python scripts/bench_compare.py --update-baseline $(ARGS)
+
+bench-noise: ## Sample bench-compare's config N times and report the spread (default n=10)
+	$(PY) python scripts/bench_noise.py $(ARGS)
 
 tp-demo: ## Tensor-parallel demo + all-reduce micro-benchmark (2 procs, gloo)
 	$(PY) torchrun --nproc_per_node=2 scripts/tp_demo.py

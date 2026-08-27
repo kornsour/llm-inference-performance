@@ -37,6 +37,17 @@ jobs:
       - name: Smoke benchmark
         run: python benchmarks/run_all.py --quick
 
+      # Gates on scripts/bench_compare.py's own (more-repeats-than-the-smoke-
+      # test) `quick` config against the row flagged `is_baseline` in
+      # benchmarks/results/history.duckdb for that exact configuration — see
+      # docs/bench-compare.md. Runs on one Python version only: the baseline
+      # is version-specific (see llminf.history.CONFIG_COLUMNS) and only one
+      # is recorded, so the other leg would just print "no baseline yet"
+      # every time — no reason to spend the run on it.
+      - name: Compare benchmark vs. baseline
+        if: matrix.python-version == '3.14'
+        run: python scripts/bench_compare.py
+
       - name: Upload benchmark JSON
         if: always()
         uses: actions/upload-artifact@v4

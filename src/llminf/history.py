@@ -19,6 +19,13 @@ version, model shape (n_layer/n_head/n_embd/params_m), and benchmark config
 comparisons across rows are only meaningful when every column but git_sha
 (and the metrics themselves) matches; see `matching_runs` and
 `scripts/bench_history.py`.
+
+At most one row per configuration may be flagged `is_baseline` — the number
+`scripts/bench_compare.py` (`make bench-compare`) gates CI against. It is
+never picked implicitly (e.g. "the first row" or "the most recent row"):
+`append_run(..., as_baseline=True)` — `make bench-baseline-update` — is the
+one documented way to set or move it, and doing so is a deliberate act, not
+something a normal `make bench` run does as a side effect.
 """
 
 from __future__ import annotations
@@ -68,6 +75,8 @@ CREATE TABLE IF NOT EXISTS runs (
     kv_cache_off_p95_ms DOUBLE,
     kv_cache_on_p50_ms DOUBLE,
     kv_cache_on_p95_ms DOUBLE,
+    kv_cache_off_peak_mem_mb DOUBLE,
+    kv_cache_on_peak_mem_mb DOUBLE,
     kv_cache_speedup_x DOUBLE,
     resident_kv_cache_mb DOUBLE,
     batching_best_speedup_x DOUBLE,
@@ -78,9 +87,24 @@ CREATE TABLE IF NOT EXISTS runs (
     quant_logit_mse DOUBLE,
     rmsnorm_backend VARCHAR,
     rmsnorm_best_speedup_x DOUBLE,
-    report_json VARCHAR
+    report_json VARCHAR,
+    is_baseline BOOLEAN NOT NULL DEFAULT FALSE
 )
 """
+
+# Columns added after the table first shipped (#20). `_ensure_schema` adds
+# these to a pre-existing `runs` table via `ALTER TABLE ... ADD COLUMN`, so an
+# already-committed `history.duckdb` (rows recorded before this migration
+# existed) keeps every old row — they just read back with NULL for the
+# columns they predate, rather than needing a destructive rebuild. DuckDB's
+# `ADD COLUMN` doesn't accept `NOT NULL`/`DEFAULT` constraints (unlike
+# `CREATE TABLE`, which does — see `_CREATE_TABLE`), so `is_baseline` is
+# backfilled to `FALSE` for old rows in a follow-up `UPDATE` instead.
+_MIGRATIONS: tuple[tuple[str, str], ...] = (
+    ("kv_cache_off_peak_mem_mb", "DOUBLE"),
+    ("kv_cache_on_peak_mem_mb", "DOUBLE"),
+    ("is_baseline", "BOOLEAN"),
+)
 
 _INSERT = """
 INSERT INTO runs (
@@ -88,11 +112,13 @@ INSERT INTO runs (
     n_layer, n_head, n_embd, params_m, prompt_len, new_tokens, repeats,
     kv_cache_off_tokens_per_s, kv_cache_on_tokens_per_s,
     kv_cache_off_p50_ms, kv_cache_off_p95_ms, kv_cache_on_p50_ms, kv_cache_on_p95_ms,
+    kv_cache_off_peak_mem_mb, kv_cache_on_peak_mem_mb,
     kv_cache_speedup_x, resident_kv_cache_mb,
     batching_best_speedup_x, batching_best_batch_size,
     quant_size_reduction_x, quant_fp32_latency_ms_median, quant_int8_latency_ms_median,
     quant_logit_mse, rmsnorm_backend, rmsnorm_best_speedup_x, report_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING run_id
 """
 
 
@@ -125,6 +151,8 @@ class RunRow:
     kv_cache_off_p95_ms: float
     kv_cache_on_p50_ms: float
     kv_cache_on_p95_ms: float
+    kv_cache_off_peak_mem_mb: float
+    kv_cache_on_peak_mem_mb: float
     kv_cache_speedup_x: float
     resident_kv_cache_mb: float
     batching_best_speedup_x: float
@@ -136,6 +164,7 @@ class RunRow:
     rmsnorm_backend: str
     rmsnorm_best_speedup_x: float
     report_json: str
+    is_baseline: bool
 
 
 _COLUMNS = tuple(RunRow.__dataclass_fields__)  # table column order == field order
@@ -144,9 +173,19 @@ _COLUMNS = tuple(RunRow.__dataclass_fields__)  # table column order == field ord
 def _ensure_schema(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(_CREATE_SEQUENCE)
     con.execute(_CREATE_TABLE)
+    existing = {row[1] for row in con.execute("PRAGMA table_info('runs')").fetchall()}
+    for name, ddl_type in _MIGRATIONS:
+        if name not in existing:
+            con.execute(f"ALTER TABLE runs ADD COLUMN {name} {ddl_type}")
+    if "is_baseline" not in existing:
+        # `ADD COLUMN` alone leaves no default, so every insert on a migrated
+        # table would otherwise write NULL forever, not just for the rows
+        # that predate the column.
+        con.execute("ALTER TABLE runs ALTER COLUMN is_baseline SET DEFAULT FALSE")
+        con.execute("UPDATE runs SET is_baseline = FALSE WHERE is_baseline IS NULL")
 
 
-def _best_batching_row(report: dict) -> tuple[float | None, int | None]:
+def best_batching_row(report: dict) -> tuple[float | None, int | None]:
     rows = report["batching"]["rows"]
     if not rows:
         return None, None
@@ -154,14 +193,14 @@ def _best_batching_row(report: dict) -> tuple[float | None, int | None]:
     return best["speedup_vs_b1"], best["batch_size"]
 
 
-def _best_rmsnorm_speedup(report: dict) -> float | None:
+def best_rmsnorm_speedup(report: dict) -> float | None:
     rows = report["rmsnorm"]["rows"]
     if not rows:
         return None
     return max(r["speedup_x"] for r in rows if r["speedup_x"] is not None)
 
 
-def append_run(report: dict, db_path: Path = DEFAULT_DB_PATH) -> None:
+def append_run(report: dict, db_path: Path = DEFAULT_DB_PATH, as_baseline: bool = False) -> int:
     """Append one `run_suite()` report as a row in the DuckDB history store.
 
     Idempotent in the sense that matters: every call adds a new row (this is
@@ -169,12 +208,18 @@ def append_run(report: dict, db_path: Path = DEFAULT_DB_PATH) -> None:
     twice for the same commit records two samples rather than one — which is
     exactly what lets `bench-history` show run-to-run spread at a fixed
     commit as well as drift across commits.
+
+    `as_baseline=True` additionally (in the same connection) clears
+    `is_baseline` on every other row sharing this run's `CONFIG_COLUMNS` and
+    sets it on the new row — see `baseline_for` and `scripts/bench_compare.py`
+    (`make bench-baseline-update` is the CLI for this). Returns the new row's
+    `run_id`.
     """
     env, model, cfg = report["env"], report["model"], report["config"]
     kv = report["kv_cache"]
     q = report["quantization"]
     rn = report["rmsnorm"]
-    batching_speedup, batching_batch_size = _best_batching_row(report)
+    batching_speedup, batching_batch_size = best_batching_row(report)
 
     values = (
         env["timestamp_utc"], env["git_sha"], env["device"], env["device_name"],
@@ -184,17 +229,25 @@ def append_run(report: dict, db_path: Path = DEFAULT_DB_PATH) -> None:
         kv["cache_off"]["tokens_per_s_mean"], kv["cache_on"]["tokens_per_s_mean"],
         kv["cache_off"]["latency"]["p50_ms"], kv["cache_off"]["latency"]["p95_ms"],
         kv["cache_on"]["latency"]["p50_ms"], kv["cache_on"]["latency"]["p95_ms"],
+        kv["cache_off"]["peak_mem_mb"], kv["cache_on"]["peak_mem_mb"],
         kv["speedup_x"], kv["resident_kv_cache_mb"],
         batching_speedup, batching_batch_size,
         q["size_reduction_x"], q["fp32_latency_ms_median"], q["int8_latency_ms_median"],
-        q["logit_mse"], rn["backend"], _best_rmsnorm_speedup(report),
+        q["logit_mse"], rn["backend"], best_rmsnorm_speedup(report),
         json.dumps(report),
     )
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with duckdb.connect(str(db_path)) as con:
         _ensure_schema(con)
-        con.execute(_INSERT, values)
+        run_id = con.execute(_INSERT, values).fetchone()[0]
+        if as_baseline:
+            where = " AND ".join(f"{c} = ?" for c in CONFIG_COLUMNS)
+            config = config_from_report(report)
+            params = [config[c] for c in CONFIG_COLUMNS]
+            con.execute(f"UPDATE runs SET is_baseline = FALSE WHERE {where}", params)
+            con.execute("UPDATE runs SET is_baseline = TRUE WHERE run_id = ?", [run_id])
+    return run_id
 
 
 def matching_runs(config: dict, db_path: Path = DEFAULT_DB_PATH, limit: int = 10) -> list[RunRow]:
@@ -214,11 +267,43 @@ def matching_runs(config: dict, db_path: Path = DEFAULT_DB_PATH, limit: int = 10
         f"SELECT {cols} FROM runs WHERE {where} "
         f"ORDER BY recorded_at DESC, run_id DESC LIMIT ?"
     )
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    # Not `read_only=True`: a `history.duckdb` committed before a schema
+    # migration (see `_MIGRATIONS`) needs `_ensure_schema` to run here too, or
+    # every read against it fails with "column not found" until something
+    # happens to open it for a write first.
+    with duckdb.connect(str(db_path)) as con:
+        _ensure_schema(con)
         rows = con.execute(sql, [*params, limit]).fetchall()
     # `recorded_at` comes back as a `datetime.datetime`; stringify it so every
     # `RunRow` field is the plain str/int/float its annotation promises.
     return [RunRow(*row[:1], str(row[1]), *row[2:]) for row in rows]
+
+
+def baseline_for(config: dict, db_path: Path = DEFAULT_DB_PATH) -> RunRow | None:
+    """The row flagged `is_baseline` for `config`, or `None` if this exact
+    configuration has never had one set.
+
+    `None` is the expected, non-error answer for any configuration nobody has
+    run `make bench-baseline-update` for yet (a new device, a changed model
+    shape, CI's first run of a workload it hasn't gated before) — callers
+    like `scripts/bench_compare.py` treat it as "nothing to gate against",
+    not a failure.
+    """
+    if not db_path.exists():
+        return None
+    where = " AND ".join(f"{c} = ?" for c in CONFIG_COLUMNS)
+    params = [config[c] for c in CONFIG_COLUMNS]
+    cols = ", ".join(_COLUMNS)
+    sql = (
+        f"SELECT {cols} FROM runs WHERE is_baseline AND {where} "
+        f"ORDER BY recorded_at DESC, run_id DESC LIMIT 1"
+    )
+    with duckdb.connect(str(db_path)) as con:  # see `matching_runs` on read_only
+        _ensure_schema(con)
+        row = con.execute(sql, params).fetchone()
+    if row is None:
+        return None
+    return RunRow(*row[:1], str(row[1]), *row[2:])
 
 
 def config_from_report(report: dict) -> dict:
