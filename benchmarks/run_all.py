@@ -64,12 +64,20 @@ def render_markdown(r: dict) -> str:
         f"tensor bytes allocated inside each decode, above the resident model — see "
         f"[`docs/methodology.md`](methodology.md).\n")
 
-    lines.append("\n## 2. Batching throughput (KV-cache on)\n")
-    lines.append("| batch size | tokens/sec | speedup vs b=1 | elapsed (s) |")
-    lines.append("| --- | --- | --- | --- |")
+    lines.append("\n## 2. Static batching throughput, ragged prompts (KV-cache on)\n")
+    lines.append(
+        "Each row is `batch size` *independent* prompts of varying length "
+        "(not one prompt copied), left-padded to a common width with a "
+        "correct attention mask. This is **static batching** — the whole "
+        "batch is assembled up front and decoded together — not continuous "
+        "batching, which admits/evicts sequences mid-flight; see "
+        "[`docs/methodology.md`](methodology.md).\n")
+    lines.append("| batch size | prompt lengths | tokens/sec | speedup vs b=1 | elapsed (s) |")
+    lines.append("| --- | --- | --- | --- | --- |")
     for row in r["batching"]["rows"]:
+        lengths = ", ".join(str(n) for n in row["prompt_lengths"])
         lines.append(
-            f"| {row['batch_size']} | {row['tokens_per_s']} | "
+            f"| {row['batch_size']} | {lengths} | {row['tokens_per_s']} | "
             f"{row['speedup_vs_b1']}× | {row['elapsed_s']} |")
 
     q = r["quantization"]

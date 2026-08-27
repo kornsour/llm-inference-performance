@@ -70,12 +70,24 @@ tensor bytes allocated inside each decode, above the resident model — see
 samples — with that few, p95 is close to the max observed rather than a
 precise tail estimate.
 
-### 2. Batching — **3.3× throughput** at batch 16
+### 2. Static batching — **3.3× throughput** at batch 16
+
+Each row batches independent, **variable-length prompts** — left-padded to a
+common width with a correct attention mask, not one prompt copied `B` times —
+so the benchmark actually exercises padding, not just matmul shape. This is
+**static batching**: the batch is assembled up front and decoded together, the
+way it is here — not the continuous batching production serving frameworks
+run (admitting/evicting sequences mid-flight); see
+[`docs/methodology.md`](docs/methodology.md).
 
 | batch size | 1 | 2 | 4 | 8 | 16 |
 | --- | --- | --- | --- | --- | --- |
 | tokens/sec | 1011 | 956 | 1742 | 3104 | 3322 |
 | speedup vs b=1 | 1.0× | 0.95× | 1.72× | 3.07× | **3.28×** |
+
+> These numbers predate the ragged-prompt version of this benchmark (see
+> [`docs/methodology.md`](docs/methodology.md)); re-run `make bench` to refresh
+> them against real padding overhead.
 
 ### 3. int8 dynamic quantization — **3.6× smaller**
 

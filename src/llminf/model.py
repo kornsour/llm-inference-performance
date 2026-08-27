@@ -46,8 +46,8 @@ class CausalSelfAttention(nn.Module):
         self.c_attn = nn.Linear(cfg.n_embd, 3 * cfg.n_embd, bias=cfg.bias)
         self.c_proj = nn.Linear(cfg.n_embd, cfg.n_embd, bias=cfg.bias)
 
-    def forward(self, x: torch.Tensor, past_kv: KVCache | None = None
-                ) -> tuple[torch.Tensor, KVCache]:
+    def forward(self, x: torch.Tensor, past_kv: KVCache | None = None,
+                attn_bias: torch.Tensor | None = None) -> tuple[torch.Tensor, KVCache]:
         B, T, C = x.shape
         q, k, v = self.c_attn(x).split(C, dim=2)
         q = q.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
@@ -60,9 +60,14 @@ class CausalSelfAttention(nn.Module):
             v = torch.cat([pv, v], dim=2)
         present = (k, v)
 
-        # T > 1 => prefill (causal among the new tokens, aligned to the end of k).
-        # T == 1 => single-token decode: attend to all cached keys, no mask needed.
-        y = F.scaled_dot_product_attention(q, k, v, is_causal=(T > 1))
+        if attn_bias is not None:
+            # `attn_bias` already encodes causality *and* which keys are real vs
+            # padding (see `GPT._build_attn_bias`), so no separate `is_causal`.
+            y = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_bias.to(q.dtype))
+        else:
+            # T > 1 => prefill (causal among the new tokens, aligned to the end of k).
+            # T == 1 => single-token decode: attend to all cached keys, no mask needed.
+            y = F.scaled_dot_product_attention(q, k, v, is_causal=(T > 1))
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.c_proj(y), present
 
@@ -86,9 +91,9 @@ class Block(nn.Module):
         self.ln_2 = RMSNorm(cfg.n_embd)
         self.mlp = MLP(cfg)
 
-    def forward(self, x: torch.Tensor, past_kv: KVCache | None = None
-                ) -> tuple[torch.Tensor, KVCache]:
-        attn_out, present = self.attn(self.ln_1(x), past_kv)
+    def forward(self, x: torch.Tensor, past_kv: KVCache | None = None,
+                attn_bias: torch.Tensor | None = None) -> tuple[torch.Tensor, KVCache]:
+        attn_out, present = self.attn(self.ln_1(x), past_kv, attn_bias)
         x = x + attn_out
         x = x + self.mlp(self.ln_2(x))
         return x, present
@@ -119,21 +124,65 @@ class GPT(nn.Module):
         idx: torch.Tensor,
         past_kvs: list[KVCache] | None = None,
         use_cache: bool = False,
+        attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, list[KVCache] | None]:
+        """Run a prefill or single-step decode.
+
+        `attention_mask` is `(B, past_len + T)`, `True`/`1` for a real token and
+        `False`/`0` for left-padding — the *whole* key sequence seen so far, not
+        just the `T` new tokens. Pass it whenever prompts in the batch were
+        left-padded to a common length (see `batching.py`); positions and
+        attention both account for the padding, so a shorter prompt in the same
+        batch produces exactly the output it would alone. Omit it for a batch
+        of same-length, unpadded sequences — the cheaper `is_causal` path below
+        is unaffected and behaves exactly as before.
+        """
         B, T = idx.shape
         past_len = past_kvs[0][0].shape[2] if past_kvs is not None else 0
-        pos = torch.arange(past_len, past_len + T, device=idx.device)
+
+        if attention_mask is not None:
+            # Position of a real token = count of real tokens at or before it,
+            # minus one; padding gets position 0 (unused — those queries' outputs
+            # are never read, and no key ever attends to a padded query/key).
+            pos = attention_mask.long().cumsum(dim=1) - 1
+            pos = pos.clamp(min=0)[:, past_len:past_len + T]
+            attn_bias = self._build_attn_bias(attention_mask, past_len, T, idx.device)
+        else:
+            pos = torch.arange(past_len, past_len + T, device=idx.device)
+            attn_bias = None
+
         x = self.wte(idx) + self.wpe(pos)
 
         presents: list[KVCache] = []
         for i, block in enumerate(self.blocks):
             past = past_kvs[i] if past_kvs is not None else None
-            x, present = block(x, past)
+            x, present = block(x, past, attn_bias)
             presents.append(present)
 
         x = self.ln_f(x)
         logits = self.lm_head(x)
         return logits, (presents if use_cache else None)
+
+    @staticmethod
+    def _build_attn_bias(attention_mask: torch.Tensor, past_len: int, T: int,
+                         device: torch.device) -> torch.Tensor:
+        """Additive `(B, 1, T, S)` bias: causal among the `T` new queries, and
+        `-inf` for any key position `attention_mask` marks as padding."""
+        S = past_len + T
+        key_valid = attention_mask.to(device=device, dtype=torch.bool)  # (B, S)
+        q_pos = torch.arange(past_len, S, device=device).unsqueeze(1)   # (T, 1)
+        k_pos = torch.arange(S, device=device).unsqueeze(0)             # (1, S)
+        causal = k_pos <= q_pos                                         # (T, S)
+        self_diag = k_pos == q_pos                                      # (T, S)
+        # A left-padded query is itself padding for as long as its own row is
+        # shorter than the batch max, so `causal & key_valid` can be all-False
+        # for it (every key it's allowed to see is also padding) — softmax over
+        # an all `-inf` row is NaN. Its output is never read (see `pos` above),
+        # so force the diagonal open to keep it a normal, ignorable row instead.
+        allowed = (causal.unsqueeze(0) & key_valid.unsqueeze(1)) | self_diag.unsqueeze(0)
+        bias = torch.zeros(allowed.shape, dtype=torch.float32, device=device)
+        bias = bias.masked_fill(~allowed, float("-inf"))
+        return bias.unsqueeze(1)  # (B, 1, T, S), broadcasts over heads
 
     def num_params(self) -> int:
         # Subtract position embeddings as nanoGPT does for the reported count.

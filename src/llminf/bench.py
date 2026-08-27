@@ -20,7 +20,7 @@ from pathlib import Path
 
 import torch
 
-from .batching import throughput
+from .batching import make_ragged_prompts, throughput
 from .generate import generate, timed_generate
 from .metrics import LatencyStats, PeakMemory, device_name, tensor_bytes
 from .model import GPT, GPTConfig
@@ -144,11 +144,24 @@ def bench_kv_cache(model: GPT, prompt: torch.Tensor, new_tokens: int, repeats: i
 
 
 def bench_batching(model: GPT, prompt: torch.Tensor, new_tokens: int,
-                   batch_sizes: tuple[int, ...]) -> dict:
+                   batch_sizes: tuple[int, ...], seed: int = 1234) -> dict:
+    """Static batching, one row per **ragged** prompt (see `batching.py`): each
+    batch of size `b` is `b` independently-seeded prompts with lengths spread
+    over `[prompt.shape[1] // 2, prompt.shape[1]]`, left-padded to a common
+    width with a correct attention mask — not `b` copies of `prompt`, which
+    would never exercise padding at all.
+    """
+    device = prompt.device
+    vocab_size = model.cfg.vocab_size
+    max_len = prompt.shape[1]
+    min_len = max(1, max_len // 2)
+
     rows = []
     for b in batch_sizes:
-        throughput(model, prompt, batch_size=min(b, 2), max_new_tokens=4)  # warmup
-        rows.append(throughput(model, prompt, batch_size=b, max_new_tokens=new_tokens))
+        prompts = make_ragged_prompts(vocab_size, b, min_len, max_len,
+                                      seed=seed + b, device=device)
+        throughput(model, prompts, max_new_tokens=4)  # warmup
+        rows.append(throughput(model, prompts, max_new_tokens=new_tokens))
     base = rows[0]["tokens_per_s"]
     for r in rows:
         r["speedup_vs_b1"] = round(r["tokens_per_s"] / base, 2) if base > 0 else None
@@ -303,7 +316,7 @@ def run_suite(device: str = "cpu", cfg: GPTConfig | None = None,
         "config": {"prompt_len": bcfg.prompt_len, "new_tokens": bcfg.new_tokens,
                    "repeats": bcfg.repeats},
         "kv_cache": bench_kv_cache(model, prompt, bcfg.new_tokens, bcfg.repeats, dev),
-        "batching": bench_batching(model, prompt, bcfg.new_tokens, bcfg.batch_sizes),
+        "batching": bench_batching(model, prompt, bcfg.new_tokens, bcfg.batch_sizes, bcfg.seed),
         "quantization": bench_quantization(model, prompt, bcfg.new_tokens),
         "rmsnorm": bench_rmsnorm(dev, cfg, bcfg.prompt_len, bcfg.repeats),
     }
