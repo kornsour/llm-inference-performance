@@ -13,6 +13,7 @@ import copy
 import platform
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +25,8 @@ from .generate import generate, timed_generate
 from .metrics import LatencyStats, PeakMemory, device_name, tensor_bytes
 from .model import GPT, GPTConfig
 from .quantize import logit_mse, model_size_bytes, quantize_int8
+from .rmsnorm import backend as rmsnorm_backend
+from .rmsnorm import rmsnorm, rmsnorm_reference
 
 # Number of `timed_generate` samples the quantization section's latency figure
 # is a median of. Kept apart from `BenchConfig.repeats` (the 5-sample count
@@ -194,6 +197,83 @@ def bench_quantization(model: GPT, idx: torch.Tensor, new_tokens: int) -> dict:
     }
 
 
+def _sync(device: torch.device) -> None:
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+
+
+def _rmsnorm_shapes(cfg: GPTConfig, prompt_len: int) -> tuple[tuple[int, int], ...]:
+    """Row/column shapes spanning this model's own decode and prefill, plus a
+    couple of larger/wider ones to show how the bandwidth argument scales."""
+    d = cfg.n_embd
+    return (
+        (1, d),             # single-token decode at this model's width
+        (prompt_len, d),    # prefill at this model's width
+        (1, 4096),          # single-token decode, a wider hidden size
+        (1024, d),          # large batch decode / short prefill at this width
+        (1024, 4096),       # large batch, wide hidden
+    )
+
+
+def bench_rmsnorm(device: torch.device, cfg: GPTConfig, prompt_len: int,
+                  repeats: int = 5, inner: int = 20,
+                  shapes: tuple[tuple[int, int], ...] | None = None) -> dict:
+    """Fused kernel vs. the `pow -> mean -> rsqrt -> mul -> mul` reference.
+
+    Timed standalone from the model — RMSNorm is a bandwidth-bound op, not a
+    model-shaped one — on freshly allocated tensors across a range of row/
+    column shapes. Each timed sample runs `inner` calls to amortize Python/
+    dispatch overhead at the smaller shapes; `repeats` samples per shape,
+    reporting the median. Achieved GB/s assumes one read and one write of the
+    activation (the weight is O(cols), negligible next to O(rows*cols)) — the
+    bandwidth argument `kernels/README.md` makes.
+
+    On CPU (and anywhere the CUDA build did not happen) `rmsnorm()` and
+    `rmsnorm_reference()` are the same code, so both columns land on the same
+    numbers — that is itself the honest result, not a bug: it says the fused
+    kernel is not what ran. `backend` in the returned dict says which path was
+    actually measured.
+    """
+    shapes = shapes or _rmsnorm_shapes(cfg, prompt_len)
+    used_backend = rmsnorm_backend(torch.empty(1, device=device))
+
+    def median_ms(fn, x: torch.Tensor, w: torch.Tensor) -> float:
+        samples = []
+        for _ in range(repeats):
+            _sync(device)
+            t0 = time.perf_counter()
+            for _ in range(inner):
+                fn(x, w)
+            _sync(device)
+            samples.append((time.perf_counter() - t0) * 1000 / inner)
+        return sorted(samples)[len(samples) // 2]
+
+    def gbps(ms: float, nbytes: int) -> float | None:
+        return round(nbytes / (ms / 1000) / 1e9, 3) if ms > 0 else None
+
+    rows_out = []
+    for rows, cols in shapes:
+        x = torch.randn(rows, cols, device=device)
+        w = torch.randn(cols, device=device)
+        rmsnorm(x, w)
+        rmsnorm_reference(x, w)  # warmup both paths
+
+        unfused_ms = median_ms(rmsnorm_reference, x, w)
+        fused_ms = median_ms(rmsnorm, x, w)
+        nbytes = 2 * rows * cols * x.element_size()  # one read + one write
+
+        rows_out.append({
+            "rows": rows,
+            "cols": cols,
+            "unfused_latency_ms_p50": round(unfused_ms, 5),
+            "fused_latency_ms_p50": round(fused_ms, 5),
+            "unfused_gbps": gbps(unfused_ms, nbytes),
+            "fused_gbps": gbps(fused_ms, nbytes),
+            "speedup_x": round(unfused_ms / fused_ms, 2) if fused_ms > 0 else None,
+        })
+    return {"backend": used_backend, "rows": rows_out}
+
+
 def run_suite(device: str = "cpu", cfg: GPTConfig | None = None,
               bcfg: BenchConfig | None = None) -> dict:
     dev = torch.device(device)
@@ -225,4 +305,5 @@ def run_suite(device: str = "cpu", cfg: GPTConfig | None = None,
         "kv_cache": bench_kv_cache(model, prompt, bcfg.new_tokens, bcfg.repeats, dev),
         "batching": bench_batching(model, prompt, bcfg.new_tokens, bcfg.batch_sizes),
         "quantization": bench_quantization(model, prompt, bcfg.new_tokens),
+        "rmsnorm": bench_rmsnorm(dev, cfg, bcfg.prompt_len, bcfg.repeats),
     }

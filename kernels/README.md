@@ -58,6 +58,17 @@ reference (`torch.testing.assert_close`). This repo was developed on Apple
 Silicon (no CUDA), so the kernel is shipped compile-ready and is exercised on GPU
 hardware; the reference path is what runs in CI.
 
+## Benchmark
+
+`bench_rmsnorm` in [`../src/llminf/bench.py`](../src/llminf/bench.py) times the
+fused path against the `pow -> mean -> rsqrt -> mul -> mul` sequence above,
+across a range of row/column shapes, and reports achieved GB/s alongside
+latency — the same before/after provenance as the other three optimizations
+(`benchmarks/results/latest.json`, [`docs/results.md`](../docs/results.md)).
+It also puts the kernel on the model's decode path: `GPT` normalizes with
+[`RMSNorm`](../src/llminf/rmsnorm.py) rather than `nn.LayerNorm`, so this
+kernel — fused or reference — is what actually runs.
+
 ## Design notes
 
 - One CUDA block per row; `blockDim.x = 256` threads cooperatively reduce the
