@@ -84,4 +84,10 @@ signal.
 - **Batching on CPU** scales sub-linearly (limited cores / memory bandwidth); the
   trend is real but a GPU shows much steeper throughput scaling.
 - **Tensor parallelism** uses gloo on CPU so the collective path is testable; on
-  multi-GPU the identical code uses NCCL.
+  multi-GPU the identical code uses NCCL. `make tp-demo` is a component-level
+  micro-benchmark — a sharded MLP plus its all-reduce, checked for correctness
+  and timed — not an end-to-end TP serving path: attention isn't sharded and
+  there's no TP generate/decode loop, so its numbers describe the MLP shard and
+  the collective, not serving latency or throughput under tensor parallelism.
+  See [`benchmarks/results/tp_latest.json`](../benchmarks/results/tp_latest.json)
+  for the committed numbers.

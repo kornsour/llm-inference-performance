@@ -3,8 +3,8 @@
 > LLM inference **performance engineering**, end to end: a device-aware benchmark
 > harness (p50/p95 latency · tokens/sec · peak memory) and **measured
 > before/after** optimizations — KV-cache, batching, and int8 quantization — plus
-> Megatron-style tensor-parallel serving (gloo on CPU, NCCL on GPU) and a custom
-> fused-RMSNorm CUDA kernel.
+> a Megatron-style tensor-parallel MLP + all-reduce micro-benchmark (gloo on CPU,
+> NCCL on GPU) and a custom fused-RMSNorm CUDA kernel.
 
 [![CI](https://github.com/kornsour/llm-inference-performance/actions/workflows/ci.yml/badge.svg)](https://github.com/kornsour/llm-inference-performance/actions/workflows/ci.yml)
 &nbsp;Python 3.14 (runs on 3.12+) · PyTorch · runs on CPU (no GPU required) · GPU-portable (`--device cuda`)
@@ -81,11 +81,12 @@ hidden — see [`docs/methodology.md`](docs/methodology.md). `torch.ao` dynamic
 quantization is a CPU-only path, so this section measures on CPU even under
 `--device cuda`, and says so in its output rather than failing.
 
-### 4. Tensor parallelism (NCCL/gloo)
+### 4. Tensor-parallel MLP + all-reduce micro-benchmark (NCCL/gloo)
 
 `make tp-demo` shards an MLP across 2 processes (Megatron column→row parallel,
-one all-reduce per block) and verifies the result matches the single-process MLP,
-then micro-benchmarks the all-reduce that TP adds per layer:
+one all-reduce per block), verifies the result matches the single-process MLP,
+then micro-benchmarks the all-reduce that TP adds per layer, and writes
+[`benchmarks/results/tp_latest.json`](benchmarks/results/tp_latest.json):
 
 ```
 backend=gloo world=2  TP-vs-reference max_err=9.3e-03
@@ -93,9 +94,15 @@ all_reduce   0.26 MB ->  0.25 ms     all_reduce   4.19 MB -> 1.08 ms
 all_reduce   1.05 MB ->  0.46 ms     all_reduce  16.78 MB -> 2.29 ms
 ```
 
-The same code runs on multi-GPU with NCCL (selected automatically). This makes
-the distributed serving path **testable on CPU** — the correctness check runs in
-CI (`tests/test_tensor_parallel.py`).
+The same code runs on multi-GPU with NCCL (selected automatically), and the
+correctness check runs in CI (`tests/test_tensor_parallel.py`). **This is a
+component-level micro-benchmark, not an end-to-end TP serving path:**
+`TensorParallelMLP` isn't wired into the GPT model, attention isn't sharded,
+and there's no TP generate/decode loop — so no latency/throughput number here
+reflects serving under tensor parallelism, only the sharded-MLP correctness
+and the raw all-reduce cost. `ColumnParallelLinear`/`RowParallelLinear` also
+materialize the full weight before slicing, so the per-rank memory saving that
+is half the point of TP isn't realized yet.
 
 ## Quickstart
 
