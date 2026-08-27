@@ -31,13 +31,20 @@ def render_markdown(r: dict) -> str:
         f"({env['device']}), torch {env['torch']}, Python {env['python']}, "
         f"{env['threads']} threads.\n")
     lines.append(
+        f"> CPU: {env['cpu_model']} · platform: {env['platform']} · "
+        f"generated {env['timestamp_utc']} · git {env['git_sha']} · "
+        f"`{' '.join(env['argv'])}`\n")
+    lines.append(
         f"**Model:** {m['params_m']}M params · {m['n_layer']}L/{m['n_head']}H/"
         f"{m['n_embd']}d · block {m['block_size']} · vocab {m['vocab_size']}. "
         f"**Workload:** prompt {c['prompt_len']} → {c['new_tokens']} new tokens, "
         f"{c['repeats']} repeats.\n")
 
     lines.append("\n## 1. KV-cache (greedy decode, identical outputs)\n")
-    lines.append("| variant | tokens/sec | p50 latency (ms) | p95 latency (ms) | TTFT p50 (ms) | peak mem (MB) |")
+    lines.append(
+        f"| variant | tokens/sec | p50 latency (ms, n={c['repeats']}) | "
+        f"p95 latency (ms, n={c['repeats']}) | TTFT p50 (ms, n={c['repeats']}) | "
+        f"peak mem (MB) |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
     for key, label in (("cache_off", "no cache (O(T²))"), ("cache_on", "KV-cache (O(T))")):
         d = kv[key]
@@ -67,8 +74,15 @@ def render_markdown(r: dict) -> str:
     lines.append("| --- | --- | --- | --- |")
     lines.append(f"| model size (MB) | {q['fp32_size_mb']} | {q['int8_size_mb']} | "
                  f"{q['size_reduction_x']}× smaller |")
-    lines.append(f"| p50 latency (ms) | {q['fp32_latency_ms_p50']} | {q['int8_latency_ms_p50']} | — |")
+    lines.append(
+        f"| latency (ms), median of {q['latency_repeats']} | "
+        f"{q['fp32_latency_ms_median']} | {q['int8_latency_ms_median']} | — |")
     lines.append(f"\nNumerical drift (logit MSE fp32→int8): **{q['logit_mse']}**.\n")
+    lines.append(
+        f"> This section's latency is a **median of {q['latency_repeats']} samples** —"
+        f" a different statistic, from a different sample count, than the p50/p95"
+        f" columns in sections 1-2 above (an interpolated percentile of "
+        f"{c['repeats']} samples). Not directly comparable to those columns.\n")
     if q["latency_device"] != env["device"]:
         lines.append(
             f"\n> torch.ao dynamic quantization is a CPU-only path, so this section "
