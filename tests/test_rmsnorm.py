@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from llminf import rmsnorm as rms
-from llminf.rmsnorm import backend, rmsnorm, rmsnorm_reference
+from llminf.rmsnorm import RMSNorm, backend, rmsnorm, rmsnorm_reference
 
 KERNEL_CU = Path(__file__).resolve().parents[1] / "kernels" / "rmsnorm_kernel.cu"
 
@@ -47,6 +47,18 @@ def test_load_inline_wiring_is_consistent():
     for fn in ("rmsnorm_forward",):
         assert f"{fn}(" in rms._CPP_SRC, f"{fn} not declared in cpp_sources"
         assert f"torch::Tensor {fn}(" in rms._CUDA_SRC, f"{fn} not defined in cuda_sources"
+
+
+def test_module_matches_functional_reference():
+    torch.manual_seed(0)
+    m = RMSNorm(32)
+    x = torch.randn(4, 32)
+    torch.testing.assert_close(m(x), rmsnorm_reference(x, m.weight, m.eps))
+
+
+def test_module_weight_starts_at_identity_scale():
+    m = RMSNorm(16)
+    torch.testing.assert_close(m.weight, torch.ones(16))
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")

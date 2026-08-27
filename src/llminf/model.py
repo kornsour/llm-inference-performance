@@ -13,6 +13,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .rmsnorm import RMSNorm
+
 KVCache = tuple[torch.Tensor, torch.Tensor]
 
 
@@ -79,9 +81,9 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, cfg: GPTConfig) -> None:
         super().__init__()
-        self.ln_1 = nn.LayerNorm(cfg.n_embd, bias=cfg.bias)
+        self.ln_1 = RMSNorm(cfg.n_embd)
         self.attn = CausalSelfAttention(cfg)
-        self.ln_2 = nn.LayerNorm(cfg.n_embd, bias=cfg.bias)
+        self.ln_2 = RMSNorm(cfg.n_embd)
         self.mlp = MLP(cfg)
 
     def forward(self, x: torch.Tensor, past_kv: KVCache | None = None
@@ -99,7 +101,7 @@ class GPT(nn.Module):
         self.wte = nn.Embedding(cfg.vocab_size, cfg.n_embd)
         self.wpe = nn.Embedding(cfg.block_size, cfg.n_embd)
         self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layer)])
-        self.ln_f = nn.LayerNorm(cfg.n_embd, bias=cfg.bias)
+        self.ln_f = RMSNorm(cfg.n_embd)
         self.lm_head = nn.Linear(cfg.n_embd, cfg.vocab_size, bias=False)
         self.wte.weight = self.lm_head.weight  # weight tying
         self.apply(self._init)

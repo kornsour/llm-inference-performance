@@ -44,6 +44,7 @@ What **is** asserted in tests is that every optimization is
 | KV-cache | recompute full prefix each step (O(T²)) | cache K/V, decode O(T) | redundant attention compute (bought with resident K/V memory) |
 | Batching | batch size 1 | batch size 2…16 | matmul utilization |
 | int8 quant | fp32 weights | int8 dynamic | model size & memory bandwidth |
+| Fused RMSNorm | `pow → mean → rsqrt → mul → mul` (separate ops) | single fused kernel (CUDA) / same reference elsewhere | achieved GB/s of a bandwidth-bound op |
 
 Each timed section runs a **warmup** generation first (to absorb lazy
 initialization / allocator warmup), then `repeats` measured runs.
@@ -76,11 +77,16 @@ signal.
   scales. `torch.ao` dynamic quantization is also a **CPU-only** path: the int8
   model cannot consume CUDA tensors, so under `--device cuda` this section is
   measured on CPU and labels itself (`latency_device`) rather than failing.
-- **The fused RMSNorm kernel is built, not stubbed.** `load_inline` compiles it
-  on first use when CUDA is present. If that build fails the harness falls back
-  to the PyTorch reference but **warns**, and `rmsnorm.load_error()` carries the
-  compiler output — a silent fallback would hide a broken kernel behind numbers
-  that still look plausible.
+- **The fused RMSNorm kernel is built, not stubbed, and it runs in the model.**
+  `load_inline` compiles it on first use when CUDA is present. If that build
+  fails the harness falls back to the PyTorch reference but **warns**, and
+  `rmsnorm.load_error()` carries the compiler output — a silent fallback would
+  hide a broken kernel behind numbers that still look plausible. `GPT` uses
+  `RMSNorm` (not `nn.LayerNorm`) for every norm, so section 4 of
+  [`results.md`](results.md) reports a real fused-vs-unfused GB/s comparison
+  rather than a kernel that sits unused next to the harness; on CPU both
+  columns land on the same numbers because they're the same code path, which
+  is reported (`backend`) rather than hidden.
 - **Batching on CPU** scales sub-linearly (limited cores / memory bandwidth); the
   trend is real but a GPU shows much steeper throughput scaling.
 - **Tensor parallelism** uses gloo on CPU so the collective path is testable; on

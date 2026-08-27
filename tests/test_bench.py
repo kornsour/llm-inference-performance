@@ -1,7 +1,13 @@
 import pytest
 import torch
 
-from llminf.bench import BenchConfig, bench_kv_cache, bench_quantization, resident_kv_bytes
+from llminf.bench import (
+    BenchConfig,
+    bench_kv_cache,
+    bench_quantization,
+    bench_rmsnorm,
+    resident_kv_bytes,
+)
 from llminf.model import GPT, GPTConfig
 
 _HAS_ENGINE = len(torch.backends.quantized.supported_engines) > 0 and \
@@ -77,3 +83,35 @@ def test_quantization_bench_leaves_the_model_alone_on_cpu():
 def test_bench_config_defaults_are_sane():
     b = BenchConfig()
     assert b.repeats >= 1 and b.new_tokens > 0 and b.batch_sizes[0] == 1
+
+
+def test_rmsnorm_bench_reports_a_row_per_shape():
+    cfg = GPTConfig(n_layer=1, n_head=1, n_embd=16, block_size=32)
+    shapes = ((1, 16), (8, 32))
+    r = bench_rmsnorm(torch.device("cpu"), cfg, prompt_len=4,
+                       repeats=2, inner=2, shapes=shapes)
+
+    assert r["backend"] == "pytorch-reference"  # no CUDA kernel to dispatch to here
+    assert len(r["rows"]) == len(shapes)
+    for row, (rows, cols) in zip(r["rows"], shapes, strict=True):
+        assert row["rows"] == rows and row["cols"] == cols
+        assert row["unfused_latency_ms_p50"] >= 0
+        assert row["fused_latency_ms_p50"] >= 0
+        assert row["unfused_gbps"] is None or row["unfused_gbps"] > 0
+        assert row["fused_gbps"] is None or row["fused_gbps"] > 0
+
+
+def test_rmsnorm_bench_on_cpu_measures_the_same_code_path():
+    """Without CUDA, `rmsnorm()` and `rmsnorm_reference()` are the same
+    implementation, so this must report parity rather than a fake speedup."""
+    cfg = GPTConfig.tiny()
+    r = bench_rmsnorm(torch.device("cpu"), cfg, prompt_len=8,
+                       repeats=3, inner=3, shapes=((64, 64),))
+    assert r["rows"][0]["speedup_x"] == pytest.approx(1.0, rel=0.5)
+
+
+def test_rmsnorm_bench_defaults_to_shapes_derived_from_the_model():
+    cfg = GPTConfig(n_layer=1, n_head=1, n_embd=48, block_size=32)
+    r = bench_rmsnorm(torch.device("cpu"), cfg, prompt_len=8, repeats=1, inner=1)
+    cols_seen = {row["cols"] for row in r["rows"]}
+    assert cfg.n_embd in cols_seen

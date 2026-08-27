@@ -3,12 +3,12 @@
     "device": "cpu",
     "device_name": "cpu",
     "torch": "2.13.0",
-    "python": "3.14.6",
+    "python": "3.14.7",
     "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
     "threads": 6
   },
   "model": {
-    "params_m": 10.75,
+    "params_m": 10.74,
     "n_layer": 6,
     "n_head": 6,
     "n_embd": 384,
@@ -24,74 +24,124 @@
     "cache_off": {
       "latency": {
         "n": 5,
-        "p50_ms": 607.763,
-        "p95_ms": 612.705,
-        "mean_ms": 608.766
+        "p50_ms": 710.335,
+        "p95_ms": 740.608,
+        "mean_ms": 716.71
       },
-      "ttft_ms_p50": 2.912,
-      "tokens_per_s_mean": 210.27,
+      "ttft_ms_p50": 2.74,
+      "tokens_per_s_mean": 178.68,
       "peak_mem_mb": 9.0
     },
     "cache_on": {
       "latency": {
         "n": 5,
-        "p50_ms": 126.744,
-        "p95_ms": 127.459,
-        "mean_ms": 126.862
+        "p50_ms": 136.649,
+        "p95_ms": 151.464,
+        "mean_ms": 141.42
       },
-      "ttft_ms_p50": 2.905,
-      "tokens_per_s_mean": 1008.98,
+      "ttft_ms_p50": 2.916,
+      "tokens_per_s_mean": 908.14,
       "peak_mem_mb": 7.04
     },
-    "speedup_x": 4.8,
+    "speedup_x": 5.08,
     "resident_kv_cache_mb": 3.52
   },
   "batching": {
     "rows": [
       {
         "batch_size": 1,
-        "elapsed_s": 0.1267,
-        "tokens_per_s": 1010.42,
+        "elapsed_s": 0.1315,
+        "tokens_per_s": 973.37,
         "total_tokens": 128,
         "speedup_vs_b1": 1.0
       },
       {
         "batch_size": 2,
-        "elapsed_s": 0.2677,
-        "tokens_per_s": 956.4,
+        "elapsed_s": 0.2431,
+        "tokens_per_s": 1052.87,
         "total_tokens": 256,
-        "speedup_vs_b1": 0.95
+        "speedup_vs_b1": 1.08
       },
       {
         "batch_size": 4,
-        "elapsed_s": 0.29,
-        "tokens_per_s": 1765.46,
+        "elapsed_s": 0.275,
+        "tokens_per_s": 1861.63,
         "total_tokens": 512,
-        "speedup_vs_b1": 1.75
+        "speedup_vs_b1": 1.91
       },
       {
         "batch_size": 8,
-        "elapsed_s": 0.3307,
-        "tokens_per_s": 3096.42,
+        "elapsed_s": 0.3098,
+        "tokens_per_s": 3305.51,
         "total_tokens": 1024,
-        "speedup_vs_b1": 3.06
+        "speedup_vs_b1": 3.4
       },
       {
         "batch_size": 16,
-        "elapsed_s": 0.592,
-        "tokens_per_s": 3459.51,
+        "elapsed_s": 0.639,
+        "tokens_per_s": 3205.11,
         "total_tokens": 2048,
-        "speedup_vs_b1": 3.42
+        "speedup_vs_b1": 3.29
       }
     ]
   },
   "quantization": {
-    "fp32_size_mb": 43.795,
-    "int8_size_mb": 12.062,
-    "size_reduction_x": 3.63,
+    "fp32_size_mb": 43.771,
+    "int8_size_mb": 12.038,
+    "size_reduction_x": 3.64,
     "latency_device": "cpu",
-    "fp32_latency_ms_p50": 127.107,
-    "int8_latency_ms_p50": 215.579,
-    "logit_mse": 0.000334
+    "fp32_latency_ms_p50": 169.416,
+    "int8_latency_ms_p50": 227.431,
+    "logit_mse": 0.000345
+  },
+  "rmsnorm": {
+    "backend": "pytorch-reference",
+    "rows": [
+      {
+        "rows": 1,
+        "cols": 384,
+        "unfused_latency_ms_p50": 0.00436,
+        "fused_latency_ms_p50": 0.00434,
+        "unfused_gbps": 0.704,
+        "fused_gbps": 0.708,
+        "speedup_x": 1.01
+      },
+      {
+        "rows": 64,
+        "cols": 384,
+        "unfused_latency_ms_p50": 0.01125,
+        "fused_latency_ms_p50": 0.01138,
+        "unfused_gbps": 17.48,
+        "fused_gbps": 17.284,
+        "speedup_x": 0.99
+      },
+      {
+        "rows": 1,
+        "cols": 4096,
+        "unfused_latency_ms_p50": 0.0049,
+        "fused_latency_ms_p50": 0.00491,
+        "unfused_gbps": 6.682,
+        "fused_gbps": 6.668,
+        "speedup_x": 1.0
+      },
+      {
+        "rows": 1024,
+        "cols": 384,
+        "unfused_latency_ms_p50": 0.1227,
+        "fused_latency_ms_p50": 0.11644,
+        "unfused_gbps": 25.638,
+        "fused_gbps": 27.015,
+        "speedup_x": 1.05
+      },
+      {
+        "rows": 1024,
+        "cols": 4096,
+        "unfused_latency_ms_p50": 0.59979,
+        "fused_latency_ms_p50": 0.54598,
+        "unfused_gbps": 55.944,
+        "fused_gbps": 61.457,
+        "speedup_x": 1.1
+      }
+    ]
   }
 }

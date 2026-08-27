@@ -1,6 +1,7 @@
 import torch
 
 from llminf.model import GPT, GPTConfig, param_bytes
+from llminf.rmsnorm import RMSNorm
 
 
 def test_forward_shapes():
@@ -26,3 +27,12 @@ def test_param_count_and_bytes():
     model = GPT(GPTConfig.tiny()).eval()
     assert model.num_params() > 0
     assert param_bytes(model) == sum(p.numel() * 4 for p in model.parameters())
+
+
+def test_norm_layers_are_fused_rmsnorm():
+    """The kernel isn't worth benchmarking if the model never calls it."""
+    model = GPT(GPTConfig.tiny()).eval()
+    assert isinstance(model.ln_f, RMSNorm)
+    for block in model.blocks:
+        assert isinstance(block.ln_1, RMSNorm)
+        assert isinstance(block.ln_2, RMSNorm)

@@ -74,6 +74,24 @@ def render_markdown(r: dict) -> str:
             f"\n> torch.ao dynamic quantization is a CPU-only path, so this section "
             f"is measured on **{q['latency_device']}** even though the rest of this "
             f"run used **{env['device']}**.\n")
+
+    rn = r["rmsnorm"]
+    lines.append("\n## 4. Fused RMSNorm kernel (on the decode path)\n")
+    lines.append(f"Backend: **{rn['backend']}**.\n")
+    lines.append("| rows × cols | unfused (ms) | fused (ms) | unfused GB/s | fused GB/s | speedup |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+    for row in rn["rows"]:
+        lines.append(
+            f"| {row['rows']}×{row['cols']} | {row['unfused_latency_ms_p50']} | "
+            f"{row['fused_latency_ms_p50']} | {row['unfused_gbps']} | {row['fused_gbps']} | "
+            f"{row['speedup_x']}× |")
+    if rn["backend"] != "cuda-fused":
+        lines.append(
+            "\n> No CUDA device was available for this run, so both columns exercise the "
+            "same PyTorch reference path — `rmsnorm.load_error()` carries the compiler "
+            "output if a CUDA build was attempted and failed. See "
+            "[`kernels/README.md`](../kernels/README.md) for the fused kernel and "
+            "[`docs/methodology.md`](methodology.md) for how it's built.\n")
     return "\n".join(lines) + "\n"
 
 

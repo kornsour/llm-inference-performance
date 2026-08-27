@@ -19,6 +19,7 @@ from __future__ import annotations
 import warnings
 
 import torch
+import torch.nn as nn
 
 # Declaration only — this is what the auto-generated pybind11 bindings compile
 # against. The definition lives in the CUDA translation unit below.
@@ -163,3 +164,21 @@ def backend(x: torch.Tensor | None = None) -> str:
     if x is not None and x.is_cuda and _load_kernel() is not None:  # pragma: no cover
         return "cuda-fused"
     return "pytorch-reference"
+
+
+class RMSNorm(nn.Module):
+    """RMSNorm as an `nn.Module`, dispatching through `rmsnorm()` above.
+
+    Unlike `nn.LayerNorm`, RMSNorm has no bias and no mean-centering term —
+    just a per-channel scale applied after normalizing by the root-mean-square.
+    This is what puts the fused kernel on the model's decode path, rather than
+    leaving it to sit unused next to the harness.
+    """
+
+    def __init__(self, dim: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return rmsnorm(x, self.weight, self.eps)
