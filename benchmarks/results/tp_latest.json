@@ -1,0 +1,30 @@
+{
+  "kind": "tensor_parallel_mlp_micro_benchmark",
+  "backend": "gloo",
+  "world_size": 2,
+  "device": "cpu",
+  "torch": "2.13.0",
+  "tp_vs_reference_max_err": 0.00927734375,
+  "all_reduce": [
+    {
+      "mb": 0.2621,
+      "ms": 8.793,
+      "mb_per_s": 29.8
+    },
+    {
+      "mb": 1.0486,
+      "ms": 2.0185,
+      "mb_per_s": 519.5
+    },
+    {
+      "mb": 4.1943,
+      "ms": 2.8051,
+      "mb_per_s": 1495.2
+    },
+    {
+      "mb": 16.7772,
+      "ms": 5.6911,
+      "mb_per_s": 2948.0
+    }
+  ]
+}

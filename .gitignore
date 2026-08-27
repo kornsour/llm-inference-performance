@@ -13,9 +13,10 @@ build/
 kernels/build/
 ~/.cache/torch_extensions/
 
-# Generated benchmark artifacts — keep the canonical latest.json as committed evidence
+# Generated benchmark artifacts — keep the canonical latest.json / tp_latest.json as committed evidence
 benchmarks/results/*.json
 !benchmarks/results/latest.json
+!benchmarks/results/tp_latest.json
 
 # OS / editor
 .DS_Store

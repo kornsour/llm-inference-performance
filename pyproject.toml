@@ -1,7 +1,7 @@
 [project]
 name = "llm-inference-performance"
 version = "0.1.0"
-description = "LLM inference performance engineering: a benchmark harness (p50/p95 latency, tokens/sec, memory) and measured before/after optimizations — KV-cache, batching, int8 quantization — plus tensor-parallel serving (gloo/NCCL) and a custom CUDA kernel."
+description = "LLM inference performance engineering: a benchmark harness (p50/p95 latency, tokens/sec, memory) and measured before/after optimizations — KV-cache, batching, int8 quantization — plus a tensor-parallel MLP + all-reduce micro-benchmark (gloo/NCCL) and a custom CUDA kernel."
 readme = "README.md"
 # Developed, tested, and documented on Python 3.14; 3.12 is the supported floor
 # (the torch build is the real constraint on the lower bound).
