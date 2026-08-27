@@ -2,10 +2,16 @@
   "env": {
     "device": "cpu",
     "device_name": "cpu",
+    "cpu_model": "Apple M5 Pro",
     "torch": "2.13.0",
-    "python": "3.14.6",
+    "python": "3.14.7",
     "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
-    "threads": 6
+    "threads": 6,
+    "timestamp_utc": "2026-08-27T15:27:40+00:00",
+    "git_sha": "cb7d4bf",
+    "argv": [
+      "benchmarks/run_all.py"
+    ]
   },
   "model": {
     "params_m": 10.75,
@@ -24,64 +30,64 @@
     "cache_off": {
       "latency": {
         "n": 5,
-        "p50_ms": 607.763,
-        "p95_ms": 612.705,
-        "mean_ms": 608.766
+        "p50_ms": 603.395,
+        "p95_ms": 604.459,
+        "mean_ms": 603.206
       },
-      "ttft_ms_p50": 2.912,
-      "tokens_per_s_mean": 210.27,
+      "ttft_ms_p50": 2.91,
+      "tokens_per_s_mean": 212.2,
       "peak_mem_mb": 9.0
     },
     "cache_on": {
       "latency": {
         "n": 5,
-        "p50_ms": 126.744,
-        "p95_ms": 127.459,
-        "mean_ms": 126.862
+        "p50_ms": 124.73,
+        "p95_ms": 130.972,
+        "mean_ms": 126.307
       },
-      "ttft_ms_p50": 2.905,
-      "tokens_per_s_mean": 1008.98,
+      "ttft_ms_p50": 2.955,
+      "tokens_per_s_mean": 1014.01,
       "peak_mem_mb": 7.04
     },
-    "speedup_x": 4.8,
+    "speedup_x": 4.78,
     "resident_kv_cache_mb": 3.52
   },
   "batching": {
     "rows": [
       {
         "batch_size": 1,
-        "elapsed_s": 0.1267,
-        "tokens_per_s": 1010.42,
+        "elapsed_s": 0.1265,
+        "tokens_per_s": 1011.47,
         "total_tokens": 128,
         "speedup_vs_b1": 1.0
       },
       {
         "batch_size": 2,
-        "elapsed_s": 0.2677,
-        "tokens_per_s": 956.4,
+        "elapsed_s": 0.2678,
+        "tokens_per_s": 956.03,
         "total_tokens": 256,
         "speedup_vs_b1": 0.95
       },
       {
         "batch_size": 4,
-        "elapsed_s": 0.29,
-        "tokens_per_s": 1765.46,
+        "elapsed_s": 0.2939,
+        "tokens_per_s": 1742.1,
         "total_tokens": 512,
-        "speedup_vs_b1": 1.75
+        "speedup_vs_b1": 1.72
       },
       {
         "batch_size": 8,
-        "elapsed_s": 0.3307,
-        "tokens_per_s": 3096.42,
+        "elapsed_s": 0.3299,
+        "tokens_per_s": 3104.12,
         "total_tokens": 1024,
-        "speedup_vs_b1": 3.06
+        "speedup_vs_b1": 3.07
       },
       {
         "batch_size": 16,
-        "elapsed_s": 0.592,
-        "tokens_per_s": 3459.51,
+        "elapsed_s": 0.6165,
+        "tokens_per_s": 3322.15,
         "total_tokens": 2048,
-        "speedup_vs_b1": 3.42
+        "speedup_vs_b1": 3.28
       }
     ]
   },
@@ -90,8 +96,9 @@
     "int8_size_mb": 12.062,
     "size_reduction_x": 3.63,
     "latency_device": "cpu",
-    "fp32_latency_ms_p50": 127.107,
-    "int8_latency_ms_p50": 215.579,
+    "latency_repeats": 3,
+    "fp32_latency_ms_median": 122.598,
+    "int8_latency_ms_median": 214.027,
     "logit_mse": 0.000334
   }
 }

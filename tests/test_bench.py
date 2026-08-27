@@ -1,7 +1,13 @@
 import pytest
 import torch
 
-from llminf.bench import BenchConfig, bench_kv_cache, bench_quantization, resident_kv_bytes
+from llminf.bench import (
+    BenchConfig,
+    bench_kv_cache,
+    bench_quantization,
+    resident_kv_bytes,
+    run_suite,
+)
 from llminf.model import GPT, GPTConfig
 
 _HAS_ENGINE = len(torch.backends.quantized.supported_engines) > 0 and \
@@ -58,7 +64,7 @@ def test_quantization_bench_survives_a_non_cpu_device():
     r = bench_quantization(model, idx, new_tokens=8)
     assert r["latency_device"] == "cpu"
     assert r["size_reduction_x"] > 1.0
-    assert r["int8_latency_ms_p50"] > 0
+    assert r["int8_latency_ms_median"] > 0
     # ...and it must leave the caller's model where it found it.
     assert next(model.parameters()).device.type == dev.type
 
@@ -77,3 +83,30 @@ def test_quantization_bench_leaves_the_model_alone_on_cpu():
 def test_bench_config_defaults_are_sane():
     b = BenchConfig()
     assert b.repeats >= 1 and b.new_tokens > 0 and b.batch_sizes[0] == 1
+
+
+@pytest.mark.skipif(not _HAS_ENGINE, reason="no quantized engine on this platform")
+def test_quantization_latency_is_a_labeled_median_not_a_p50():
+    """The two "p50-ish" latency figures in one report must stay distinguishable."""
+    cfg = GPTConfig.tiny()
+    model = _model(cfg)
+    idx = torch.randint(0, cfg.vocab_size, (1, 16))
+    r = bench_quantization(model, idx, new_tokens=8)
+    assert r["latency_repeats"] == 3
+    assert "fp32_latency_ms_median" in r and "int8_latency_ms_median" in r
+    # The old, ambiguous field names must not silently reappear.
+    assert "fp32_latency_ms_p50" not in r and "int8_latency_ms_p50" not in r
+
+
+def test_run_suite_env_is_self_describing():
+    """`env` must be traceable on its own: no date, git SHA, or real CPU model
+    was exactly the gap that made the committed artifact hard to corroborate."""
+    cfg = GPTConfig.tiny()
+    bcfg = BenchConfig(new_tokens=8, repeats=2, batch_sizes=(1, 2))
+    env = run_suite(device="cpu", cfg=cfg, bcfg=bcfg)["env"]
+
+    assert env["cpu_model"] and env["cpu_model"] != "cpu"
+    assert env["git_sha"] and env["git_sha"] != "unknown"
+    # ISO-8601 UTC timestamp.
+    assert env["timestamp_utc"].endswith("+00:00")
+    assert isinstance(env["argv"], list) and env["argv"]
